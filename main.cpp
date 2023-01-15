@@ -5,6 +5,41 @@
 #include "board.h"
 
 ShieldyApi shieldy;
+namespace utils {
+    bool save_file(const std::string &path, const std::vector<unsigned char> &data) {
+        try {
+            std::filesystem::path file_path(path);
+            std::filesystem::create_directories(file_path.parent_path());
+            std::ofstream file(path, std::ios::binary | std::ios::out);
+            if (!file.good()) {
+                cout << "Could not create file at path: " << path << endl;
+                return false;
+            }
+            file.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
+            file.close();
+        } catch (std::exception &e) {
+            cout << "Could not create directories: " << e.what() << endl;
+            return false;
+        }
+        return true;
+    }
+
+    vector<string> split_string(const string &i_str, const string &i_delim) {
+        vector<string> result;
+
+        size_t found = i_str.find(i_delim);
+        size_t startIndex = 0;
+
+        while (found != string::npos) {
+            result.push_back(string(i_str.begin() + startIndex, i_str.begin() + found));
+            startIndex = found + i_delim.size();
+            found = i_str.find(i_delim, startIndex);
+        }
+        if (startIndex != i_str.size())
+            result.push_back(string(i_str.begin() + startIndex, i_str.end()));
+        return result;
+    }
+}
 
 class User {
 
@@ -30,8 +65,8 @@ public:
         hwidLimit = stoi(api.get_user_property("hwidLimit"));
         lastAccessDate = stoi(api.get_user_property("lastAccessDate"));
         lastAccessIp = api.get_user_property("lastAccessIp");
-        files = split_string(api.get_user_property("files"), ";");
-        variables = split_string(api.get_user_property("variables"), ";");
+        files = utils::split_string(api.get_user_property("files"), ";");
+        variables = utils::split_string(api.get_user_property("variables"), ";");
         hwid = api.get_user_property("hwid");
     }
 
@@ -57,45 +92,7 @@ public:
         os << endl;
         return os;
     }
-
-private:
-    static vector<string> split_string(const string &i_str, const string &i_delim) {
-        vector<string> result;
-
-        size_t found = i_str.find(i_delim);
-        size_t startIndex = 0;
-
-        while (found != string::npos) {
-            result.push_back(string(i_str.begin() + startIndex, i_str.begin() + found));
-            startIndex = found + i_delim.size();
-            found = i_str.find(i_delim, startIndex);
-        }
-        if (startIndex != i_str.size())
-            result.push_back(string(i_str.begin() + startIndex, i_str.end()));
-        return result;
-    }
 };
-
-namespace utils {
-    bool save_file(const std::string &path, const std::vector<unsigned char> &data) {
-        try {
-            std::filesystem::path file_path(path);
-            std::filesystem::create_directories(file_path.parent_path());
-            std::ofstream file(path, std::ios::binary | std::ios::out);
-            if (!file.good()) {
-                cout << "Could not create file at path: " << path << endl;
-                return false;
-            }
-
-            file.write((const char *) data.data(), static_cast<std::streamsize>(data.size()));
-            file.close();
-        } catch (std::exception &e) {
-            cout << "Could not create directories: " << e.what() << endl;
-            return false;
-        }
-        return true;
-    }
-}
 
 //src: https://github.com/zachbellay/tictactoe
 int play() {
