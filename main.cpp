@@ -6,13 +6,9 @@
 
 ShieldyApi shieldy;
 
-class ShieldyUser {
+class User {
 
 public:
-    ShieldyUser() {
-
-    }
-
     string username;
     string avatar;
     int accessLevel = 0;
@@ -25,7 +21,7 @@ public:
     vector<string> variables = {};
     string hwid;
 
-    ShieldyUser(ShieldyApi api) {
+    User(ShieldyApi api) {
         username = api.get_user_property("username");
         avatar = api.get_user_property("avatar");
         accessLevel = stoi(api.get_user_property("accessLevel"));
@@ -39,7 +35,7 @@ public:
         hwid = api.get_user_property("hwid");
     }
 
-    friend std::ostream& operator<<(std::ostream& os, const ShieldyUser& user) {
+    friend std::ostream& operator<<(std::ostream& os, const User& user) {
         os << "USER" << endl << endl;
         os << "username: " << user.username << endl;
         os << "avatar: " << user.avatar << endl;
@@ -168,7 +164,7 @@ int main() {
         return 1;
     }
 
-    ShieldyUser user = ShieldyUser(shieldy);
+    User user = User(shieldy);
     cout << "Access granted, have fun " << user.username << endl << endl;
     cout << "Your hwid is: " << user.hwid << endl;
     //you can also get hwid that way
