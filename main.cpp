@@ -21,7 +21,7 @@ public:
     vector<string> variables = {};
     string hwid;
 
-    User(ShieldyApi api) {
+    explicit User(ShieldyApi api) {
         username = api.get_user_property("username");
         avatar = api.get_user_property("avatar");
         accessLevel = stoi(api.get_user_property("accessLevel"));
@@ -35,7 +35,7 @@ public:
         hwid = api.get_user_property("hwid");
     }
 
-    friend std::ostream& operator<<(std::ostream& os, const User& user) {
+    friend std::ostream &operator<<(std::ostream &os, const User &user) {
         os << "USER" << endl << endl;
         os << "username: " << user.username << endl;
         os << "avatar: " << user.avatar << endl;
@@ -46,11 +46,11 @@ public:
         os << "lastAccessDate: " << user.lastAccessDate << endl;
         os << "lastAccessIp: " << user.lastAccessIp << endl;
         os << "files: " << endl;
-        for (auto &file : user.files) {
+        for (auto &file: user.files) {
             os << file << endl;
         }
         os << "variables: " << endl;
-        for (auto &variable : user.variables) {
+        for (auto &variable: user.variables) {
             os << variable << endl;
         }
         os << "hwid: " << user.hwid << endl;
@@ -59,7 +59,7 @@ public:
     }
 
 private:
-    vector<string> split_string(const string &i_str, const string &i_delim) {
+    static vector<string> split_string(const string &i_str, const string &i_delim) {
         vector<string> result;
 
         size_t found = i_str.find(i_delim);
@@ -77,7 +77,7 @@ private:
 };
 
 namespace utils {
-    bool save_file(const std::string& path, const std::vector<unsigned char>& data) {
+    bool save_file(const std::string &path, const std::vector<unsigned char> &data) {
         try {
             std::filesystem::path file_path(path);
             std::filesystem::create_directories(file_path.parent_path());
@@ -87,7 +87,7 @@ namespace utils {
                 return false;
             }
 
-            file.write((const char*)data.data(), data.size());
+            file.write((const char *) data.data(), static_cast<std::streamsize>(data.size()));
             file.close();
         } catch (std::exception &e) {
             cout << "Could not create directories: " << e.what() << endl;
