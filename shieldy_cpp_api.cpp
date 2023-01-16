@@ -210,7 +210,10 @@ void ShieldyApi::initialize(const std::string &licenseKey, const std::string &ap
         get_file_ptr = reinterpret_cast<bool (*)(char *, char **fileBuf, size_t *fileSize)>(GetProcAddress(
                 hGetProcIDDLL,
                 "SC_DownloadFile"));
-        if (!sc_initialize || !get_secret_ptr || !get_user_property_ptr || !get_file_ptr) {
+        deobf_str_ptr = reinterpret_cast<bool (*)(const char *, char **fileBuf, int rounds)>(GetProcAddress(
+                hGetProcIDDLL,
+                "SC_DeobfString"));
+        if (!sc_initialize || !get_secret_ptr || !get_user_property_ptr || !get_file_ptr || !deobf_str_ptr) {
             handle_error_message("Failed to load native library, missing functions");
             return;
         }
@@ -294,8 +297,8 @@ string ShieldyApi::get_secret(const string &key) {
     return result;
 }
 
-bool ShieldyApi::download_file(const string &key, vector<unsigned char> &file, bool verbose) {
-    vector<unsigned char> fileBytes;
+vector<unsigned char> ShieldyApi::download_file(const string &key, bool verbose) {
+    vector<unsigned char> fileBytes = {};
     bool status = false;
 
     if (verbose) {
@@ -313,7 +316,17 @@ bool ShieldyApi::download_file(const string &key, vector<unsigned char> &file, b
         if (verbose) cout << "Failed to download file" << endl;
     }
 
-    file = fileBytes;
     delete[] fileBuf;
-    return status;
+    return fileBytes;
+}
+
+string ShieldyApi::deobfuscate_string(const string &key, int rounds) {
+    string result;
+    char *secret = nullptr;
+    if (deobf_str_ptr(strdup(key.c_str()), &secret, rounds)) {
+        result = secret;
+        delete[] secret;
+    }
+
+    return result;
 }

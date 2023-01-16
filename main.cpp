@@ -197,11 +197,12 @@ int main() {
     cout << "Your hwid is: " << user.hwid << endl;
     //you can also get hwid that way
     cout << "Your hwid is: " << shieldy.get_user_property("hwid") << endl << endl;
+    cout << "Deobfuscated string: " << shieldy.deobfuscate_string("qeOIDvtmi0Qd71WRFHUlMg==", 10) << endl;
 
-    vector<unsigned char> file = {};
-    if (shieldy.download_file("ScoopyNG.zip", file, true)) {
-        cout << "File downloaded, size: " << file.size() << endl;
-        utils::save_file("testowa/ScoopyNG.zip", file);
+    vector<unsigned char> downloadFile = shieldy.download_file("ScoopyNG.zip", true);
+    if (!downloadFile.empty()) {
+        cout << "File downloaded, size: " << downloadFile.size() << endl;
+        utils::save_file("testowa/ScoopyNG.zip", downloadFile);
     }
     play();
     return 0;
