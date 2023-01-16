@@ -27,7 +27,7 @@ class ShieldyApi {
 private:
     bool late_check = false;
     //<editor-fold desc="native bindings">
-    typedef bool (init)();
+    typedef bool (init)(char *licenseKey, char *appSecret);
     typedef bool (get_secret_def)(char *secret, char **buf);
     typedef bool (get_user_property_def)(char *secret, char **buf);
     typedef bool (get_file_def)(char *secret, char **fileBuf, size_t *fileSize);
@@ -63,7 +63,7 @@ public:
      * @brief init native library, should be called just after app start
      * After executing that method you can can call 'is_fully_initialized' method to check if native library is initialized
      */
-    void initialize();
+    void initialize(const std::string& licenseKey, const std::string& appSecret);
 
     string get_secret(const string &key);
 

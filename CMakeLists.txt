@@ -8,6 +8,5 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wl,--output-def,CppShieldyExampleWinApi
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xlinker -Map=CppShieldyExampleWinApi.map")
 
 add_executable(CppShieldyExampleWinApi main.cpp shieldy_cpp_api.cpp shieldy_cpp_api.h board.cpp)
-target_link_libraries(CppShieldyExampleWinApi Crypt32.Lib)
-target_link_libraries(CppShieldyExampleWinApi bcrypt.lib)
+target_link_libraries(CppShieldyExampleWinApi -lCrypt32 -lbcrypt)
 target_link_libraries(CppShieldyExampleWinApi -static)

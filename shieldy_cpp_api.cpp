@@ -158,7 +158,7 @@ void ShieldyApi::handle_error_message(const string &msg) {
     MessageBoxA(nullptr, msg.c_str(), "Error", MB_OK | MB_ICONERROR);
 }
 
-void ShieldyApi::initialize() {
+void ShieldyApi::initialize(const std::string &licenseKey, const std::string &appSecret) {
     try {
         //do update if exists
         if (is_file_exists(NATIVE_LIBRARY_UPDATE_PATH)) {
@@ -202,18 +202,20 @@ void ShieldyApi::initialize() {
             return;
         }
 
-        init *sc_initialize = (init *) GetProcAddress(hGetProcIDDLL, "SC_Initialize");
+        init *sc_initialize = reinterpret_cast<bool (*)(char *, char *)>(GetProcAddress(hGetProcIDDLL,
+                                                                                        "SC_Initialize"));
         get_secret_ptr = reinterpret_cast<bool (*)(char *, char **)>(GetProcAddress(hGetProcIDDLL, "SC_GetSecret"));
         get_user_property_ptr = reinterpret_cast<bool (*)(char *, char **)>(GetProcAddress(hGetProcIDDLL,
-                                                                                          "SC_GetUserProperty"));
-        get_file_ptr = reinterpret_cast<bool (*)(char *, char **fileBuf, size_t *fileSize)>(GetProcAddress(hGetProcIDDLL,
-                                                                                          "SC_DownloadFile"));
+                                                                                           "SC_GetUserProperty"));
+        get_file_ptr = reinterpret_cast<bool (*)(char *, char **fileBuf, size_t *fileSize)>(GetProcAddress(
+                hGetProcIDDLL,
+                "SC_DownloadFile"));
         if (!sc_initialize || !get_secret_ptr || !get_user_property_ptr || !get_file_ptr) {
             handle_error_message("Failed to load native library, missing functions");
             return;
         }
 
-        if (sc_initialize()) {
+        if (sc_initialize(strdup(licenseKey.c_str()), strdup(appSecret.c_str()))) {
             late_check = true;
         }
 

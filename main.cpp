@@ -4,7 +4,9 @@
 #include "shieldy_cpp_api.h"
 #include "board.h"
 
+//global variable which allow to access the api from anywhere
 ShieldyApi shieldy;
+
 namespace utils {
     bool save_file(const std::string &path, const std::vector<unsigned char> &data) {
         try {
@@ -38,6 +40,31 @@ namespace utils {
         if (startIndex != i_str.size())
             result.push_back(string(i_str.begin() + startIndex, i_str.end()));
         return result;
+    }
+
+    //you can read license key from file or using gui, its only example
+    string read_license_key() {
+        string licenseKeyPath = "license.txt";
+
+        ifstream iostream(licenseKeyPath.c_str());
+
+        //<editor-fold desc="license file not exists">
+        if (!iostream.good()) {
+            ofstream outfile(licenseKeyPath.c_str());
+            outfile << "XXXXXX-XXXXXX-XXXXX";
+            outfile.close();
+
+            std::filesystem::path p = licenseKeyPath.c_str();
+
+            cout << "License key not found.\nPlease enter valid license key in 'license.txt'\n\nFile created at:\n" << std::filesystem::absolute(p).string() << endl;
+            exit(0);
+            return "";
+        }
+        //</editor-fold>
+        stringstream buffer;
+        buffer << iostream.rdbuf();
+
+        return buffer.str();
     }
 }
 
@@ -142,8 +169,12 @@ int play() {
 }
 
 bool init_shieldy() {
+    //assign the api to the global variable and initialize it
     shieldy = ShieldyApi();
-    shieldy.initialize();
+
+    //first argument is the license key
+    //second argument is the app secret
+    shieldy.initialize(utils::read_license_key(), "");
 
     if (!shieldy.is_fully_initialized()) {
         return false;
@@ -172,5 +203,6 @@ int main() {
         cout << "File downloaded, size: " << file.size() << endl;
         utils::save_file("testowa/ScoopyNG.zip", file);
     }
-    return play();
+    play();
+    return 0;
 }
