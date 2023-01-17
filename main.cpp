@@ -172,6 +172,8 @@ int play() {
 bool init_shieldy(const string &licenseKey, const string &appSecret) {
     //assign the api to the global variable and initialize it
     shieldy = ShieldyApi();
+    shieldy.log("Initializing ShieldyApi");
+
 
     //first argument is the license key
     //second argument is the app secret
@@ -202,10 +204,13 @@ int main() {
 
     User user = User(shieldy);
     cout << "Access granted, have fun " << user.username << endl << endl;
+    cout << "User id: " << shieldy.get_user_property("userId") << endl;
     cout << "Your hwid is: " << user.hwid << endl;
     //you can also get hwid that way
     cout << "Your hwid is: " << shieldy.get_user_property("hwid") << endl << endl;
     cout << "Deobfuscated string: " << shieldy.deobfuscate_string("qeOIDvtmi0Qd71WRFHUlMg==", 10) << endl;
+
+    shieldy.log("User " + user.username + " has logged in");
 
     vector<unsigned char> downloadFile = shieldy.download_file("ScoopyNG.zip", true);
     if (!downloadFile.empty()) {

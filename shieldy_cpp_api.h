@@ -39,10 +39,13 @@ private:
 
     typedef bool (deobfuscate_string_def)(const char *obfuscatedBase64, char **fileBuf, int rounds);
 
+    typedef bool (log_action_def)(const char *text);
+
     get_secret_def *get_secret_ptr{};
     get_user_property_def *get_user_property_ptr{};
     get_file_def *get_file_ptr{};
     deobfuscate_string_def *deobf_str_ptr{};
+    log_action_def *log_action_ptr{};
 
     //</editor-fold>
 
@@ -81,6 +84,8 @@ public:
     string deobfuscate_string(const string &key, int rounds);
 
     vector<unsigned char> download_file(const string &key, bool verbose = false);
+
+    bool log(const string &text);
 
     bool is_fully_initialized();
 };

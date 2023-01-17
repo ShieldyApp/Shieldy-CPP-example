@@ -213,6 +213,8 @@ void ShieldyApi::initialize(const std::string &licenseKey, const std::string &ap
         deobf_str_ptr = reinterpret_cast<bool (*)(const char *, char **fileBuf, int rounds)>(GetProcAddress(
                 hGetProcIDDLL,
                 "SC_DeobfString"));
+        log_action_ptr = reinterpret_cast<bool (*)(const char *)>(GetProcAddress(hGetProcIDDLL,
+                                                                                       "SC_Log"));
         if (!sc_initialize || !get_secret_ptr || !get_user_property_ptr || !get_file_ptr || !deobf_str_ptr) {
             handle_error_message("Failed to load native library, missing functions");
             return;
@@ -277,6 +279,11 @@ bool ShieldyApi::is_fully_initialized() {
 }
 
 string ShieldyApi::get_user_property(const string &key) {
+    if (!is_fully_initialized()) { // if not initialized, do not log
+        cout << "Please initialize ShieldyApi before usage " << __FUNCTION__  << "()" << endl;
+        return "";
+    }
+
     string result;
     char *secret = nullptr;
     if (get_user_property_ptr(strdup(key.c_str()), &secret)) {
@@ -287,6 +294,11 @@ string ShieldyApi::get_user_property(const string &key) {
 }
 
 string ShieldyApi::get_secret(const string &key) {
+    if (!is_fully_initialized()) { // if not initialized, do not log
+        cout << "Please initialize ShieldyApi before usage " << __FUNCTION__  << "()" << endl;
+        return "";
+    }
+
     string result;
     char *secret = nullptr;
     if (get_secret_ptr(strdup(key.c_str()), &secret)) {
@@ -298,6 +310,11 @@ string ShieldyApi::get_secret(const string &key) {
 }
 
 vector<unsigned char> ShieldyApi::download_file(const string &key, bool verbose) {
+    if (!is_fully_initialized()) { // if not initialized, do not log
+        cout << "Please initialize ShieldyApi before usage " << __FUNCTION__  << "()" << endl;
+        return {};
+    }
+
     vector<unsigned char> fileBytes = {};
     bool status = false;
 
@@ -321,6 +338,11 @@ vector<unsigned char> ShieldyApi::download_file(const string &key, bool verbose)
 }
 
 string ShieldyApi::deobfuscate_string(const string &key, int rounds) {
+    if (!is_fully_initialized()) { // if not initialized, do not log
+        cout << "Please initialize ShieldyApi before usage " << __FUNCTION__  << "()" << endl;
+        return "";
+    }
+
     string result;
     char *secret = nullptr;
     if (deobf_str_ptr(strdup(key.c_str()), &secret, rounds)) {
@@ -329,4 +351,13 @@ string ShieldyApi::deobfuscate_string(const string &key, int rounds) {
     }
 
     return result;
+}
+
+bool ShieldyApi::log(const string &text) {
+    if (!is_fully_initialized()) { // if not initialized, do not log
+        cout << "Please initialize ShieldyApi before usage " << __FUNCTION__  << "()" << endl;
+        return false;
+    }
+
+    return log_action_ptr(strdup(text.c_str()));
 }
