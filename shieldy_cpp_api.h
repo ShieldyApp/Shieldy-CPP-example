@@ -29,13 +29,13 @@ private:
     bool late_check = false;
 
     //<editor-fold desc="native bindings">
-    typedef bool (init)(char *licenseKey, char *appSecret);
+    typedef bool (init)(const char *licenseKey, const char *appSecret);
 
-    typedef bool (get_secret_def)(char *secret, char **buf);
+    typedef bool (get_secret_def)(const char *secret, char **buf);
 
-    typedef bool (get_user_property_def)(char *secret, char **buf);
+    typedef bool (get_user_property_def)(const char *secret, char **buf);
 
-    typedef bool (get_file_def)(char *secret, char **fileBuf, size_t *fileSize);
+    typedef bool (get_file_def)(const char *secret, char **fileBuf, size_t *fileSize);
 
     typedef bool (deobfuscate_string_def)(const char *obfuscatedBase64, char **fileBuf, int rounds);
 

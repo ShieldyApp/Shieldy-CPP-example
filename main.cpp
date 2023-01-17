@@ -17,7 +17,7 @@ namespace utils {
                 cout << "Could not create file at path: " << path << endl;
                 return false;
             }
-            file.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
+            file.write(reinterpret_cast<const char *>(data.data()), static_cast<std::streamsize>(data.size()));
             file.close();
         } catch (std::exception &e) {
             cout << "Could not create directories: " << e.what() << endl;
@@ -56,7 +56,8 @@ namespace utils {
 
             std::filesystem::path p = licenseKeyPath.c_str();
 
-            cout << "License key not found.\nPlease enter valid license key in 'license.txt'\n\nFile created at:\n" << std::filesystem::absolute(p).string() << endl;
+            cout << "License key not found.\nPlease enter valid license key in 'license.txt'\n\nFile created at:\n"
+                 << std::filesystem::absolute(p).string() << endl;
             exit(0);
             return "";
         }
@@ -168,13 +169,13 @@ int play() {
     return EXIT_SUCCESS;
 }
 
-bool init_shieldy() {
+bool init_shieldy(const string &licenseKey, const string &appSecret) {
     //assign the api to the global variable and initialize it
     shieldy = ShieldyApi();
 
     //first argument is the license key
     //second argument is the app secret
-    shieldy.initialize(utils::read_license_key(), "");
+    shieldy.initialize(licenseKey, appSecret);
 
     if (!shieldy.is_fully_initialized()) {
         return false;
@@ -187,7 +188,14 @@ int main() {
     cout << "Hello there!" << endl;
     cout << "Please wait a moment, we are checking your access.." << endl;
 
-    if (!init_shieldy()) {
+    //obained from https://dashboard.shieldy.app
+    string appSecret = "76934b5e-2191-47e2-88a2-a05000a3bbf9";
+
+    //read license key from user
+    string key = utils::read_license_key();
+
+    //initialize auth api using license key and app secret
+    if (!init_shieldy(key, appSecret)) {
         cout << "Shieldy is not initialized, please try again later." << endl;
         return 1;
     }

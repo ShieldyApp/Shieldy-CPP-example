@@ -202,12 +202,12 @@ void ShieldyApi::initialize(const std::string &licenseKey, const std::string &ap
             return;
         }
 
-        init *sc_initialize = reinterpret_cast<bool (*)(char *, char *)>(GetProcAddress(hGetProcIDDLL,
+        init *sc_initialize = reinterpret_cast<bool (*)(const char *, const char *)>(GetProcAddress(hGetProcIDDLL,
                                                                                         "SC_Initialize"));
-        get_secret_ptr = reinterpret_cast<bool (*)(char *, char **)>(GetProcAddress(hGetProcIDDLL, "SC_GetSecret"));
-        get_user_property_ptr = reinterpret_cast<bool (*)(char *, char **)>(GetProcAddress(hGetProcIDDLL,
+        get_secret_ptr = reinterpret_cast<bool (*)(const char *, char **)>(GetProcAddress(hGetProcIDDLL, "SC_GetSecret"));
+        get_user_property_ptr = reinterpret_cast<bool (*)(const char *, char **)>(GetProcAddress(hGetProcIDDLL,
                                                                                            "SC_GetUserProperty"));
-        get_file_ptr = reinterpret_cast<bool (*)(char *, char **fileBuf, size_t *fileSize)>(GetProcAddress(
+        get_file_ptr = reinterpret_cast<bool (*)(const char *, char **fileBuf, size_t *fileSize)>(GetProcAddress(
                 hGetProcIDDLL,
                 "SC_DownloadFile"));
         deobf_str_ptr = reinterpret_cast<bool (*)(const char *, char **fileBuf, int rounds)>(GetProcAddress(
