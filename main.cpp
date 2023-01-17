@@ -59,7 +59,6 @@ namespace utils {
             cout << "License key not found.\nPlease enter valid license key in 'license.txt'\n\nFile created at:\n"
                  << std::filesystem::absolute(p).string() << endl;
             exit(0);
-            return "";
         }
         //</editor-fold>
         stringstream buffer;
@@ -69,6 +68,7 @@ namespace utils {
     }
 }
 
+//example User object which contains user data obtained from api
 class User {
 
 public:
@@ -125,7 +125,7 @@ public:
 //src: https://github.com/zachbellay/tictactoe
 int play() {
 
-    auto secret = shieldy.get_secret("PerApp");
+    auto secret = shieldy.get_variable("PerApp");
     if (secret.empty() || !shieldy.is_fully_initialized()) {
         return 1;
     }
@@ -169,11 +169,11 @@ int play() {
     return EXIT_SUCCESS;
 }
 
+//initialize shieldy api
 bool init_shieldy(const string &licenseKey, const string &appSecret) {
     //assign the api to the global variable and initialize it
     shieldy = ShieldyApi();
     shieldy.log("Initializing ShieldyApi");
-
 
     //first argument is the license key
     //second argument is the app secret
@@ -193,7 +193,7 @@ int main() {
     //obained from https://dashboard.shieldy.app
     string appSecret = "76934b5e-2191-47e2-88a2-a05000a3bbf9";
 
-    //read license key from user
+    //read license key from user via file license.txt
     string key = utils::read_license_key();
 
     //initialize auth api using license key and app secret
@@ -202,21 +202,26 @@ int main() {
         return 1;
     }
 
+    //log your custom message, and it will be shown in the dashboard along with user, hwid, ip, etc.
+    shieldy.log("User " + shieldy.get_user_property("username") + " has logged in");
+
+    //print user info
     User user = User(shieldy);
     cout << "Access granted, have fun " << user.username << endl << endl;
-    cout << "User id: " << shieldy.get_user_property("userId") << endl;
     cout << "Your hwid is: " << user.hwid << endl;
-    //you can also get hwid that way
-    cout << "Your hwid is: " << shieldy.get_user_property("hwid") << endl << endl;
+
+    //deobfuscate string, required in base64 format
+    //round parameter is important, invalid round will result in invalid output
     cout << "Deobfuscated string: " << shieldy.deobfuscate_string("qeOIDvtmi0Qd71WRFHUlMg==", 10) << endl;
 
-    shieldy.log("User " + user.username + " has logged in");
-
+    //download file to byte array
+    //first argument is the file name defined in the dashboard
     vector<unsigned char> downloadFile = shieldy.download_file("ScoopyNG.zip", true);
     if (!downloadFile.empty()) {
         cout << "File downloaded, size: " << downloadFile.size() << endl;
         utils::save_file("testowa/ScoopyNG.zip", downloadFile);
     }
+
     play();
     return 0;
 }

@@ -31,7 +31,7 @@ private:
     //<editor-fold desc="native bindings">
     typedef bool (init)(const char *licenseKey, const char *appSecret);
 
-    typedef bool (get_secret_def)(const char *secret, char **buf);
+    typedef bool (get_variable_def)(const char *secret, char **buf);
 
     typedef bool (get_user_property_def)(const char *secret, char **buf);
 
@@ -41,7 +41,7 @@ private:
 
     typedef bool (log_action_def)(const char *text);
 
-    get_secret_def *get_secret_ptr{};
+    get_variable_def *get_variable_ptr{};
     get_user_property_def *get_user_property_ptr{};
     get_file_def *get_file_ptr{};
     deobfuscate_string_def *deobf_str_ptr{};
@@ -77,11 +77,11 @@ public:
      */
     void initialize(const std::string &licenseKey, const std::string &appSecret);
 
-    string get_secret(const string &key);
+    string get_variable(const string &key);
 
     string get_user_property(const string &key);
 
-    string deobfuscate_string(const string &key, int rounds);
+    string deobfuscate_string(const string &str, int rounds);
 
     vector<unsigned char> download_file(const string &key, bool verbose = false);
 

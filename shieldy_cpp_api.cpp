@@ -204,7 +204,7 @@ void ShieldyApi::initialize(const std::string &licenseKey, const std::string &ap
 
         init *sc_initialize = reinterpret_cast<bool (*)(const char *, const char *)>(GetProcAddress(hGetProcIDDLL,
                                                                                         "SC_Initialize"));
-        get_secret_ptr = reinterpret_cast<bool (*)(const char *, char **)>(GetProcAddress(hGetProcIDDLL, "SC_GetSecret"));
+        get_variable_ptr = reinterpret_cast<bool (*)(const char *, char **)>(GetProcAddress(hGetProcIDDLL, "SC_GetSecret"));
         get_user_property_ptr = reinterpret_cast<bool (*)(const char *, char **)>(GetProcAddress(hGetProcIDDLL,
                                                                                            "SC_GetUserProperty"));
         get_file_ptr = reinterpret_cast<bool (*)(const char *, char **fileBuf, size_t *fileSize)>(GetProcAddress(
@@ -215,7 +215,8 @@ void ShieldyApi::initialize(const std::string &licenseKey, const std::string &ap
                 "SC_DeobfString"));
         log_action_ptr = reinterpret_cast<bool (*)(const char *)>(GetProcAddress(hGetProcIDDLL,
                                                                                        "SC_Log"));
-        if (!sc_initialize || !get_secret_ptr || !get_user_property_ptr || !get_file_ptr || !deobf_str_ptr) {
+        cout << log_action_ptr("Initializing Shieldy API") << endl;
+        if (!sc_initialize || !get_variable_ptr || !get_user_property_ptr || !get_file_ptr || !deobf_str_ptr) {
             handle_error_message("Failed to load native library, missing functions");
             return;
         }
@@ -274,10 +275,32 @@ HRESULT ShieldyApi::VerifyTest(PCWSTR algorithm, PCSTR keyAsPem, BYTE *signature
     return HRESULT_FROM_WIN32(hr);
 }
 
+/***
+ * @return - true if user successfully logged in, false otherwise
+ */
 bool ShieldyApi::is_fully_initialized() {
     return late_check;
 }
 
+/***
+ * Get authenticated user property from Shieldy
+ * Available properties:
+ * - username
+ * - avatar (as base64 string)
+ * - accessLevel
+ * - licenseCreated (as unix timestamp)
+ * - licenseExpiry (as unix timestamp)
+ * - hwidLimit
+ * - lastAccessDate (as unix timestamp)
+ * - lastAccessIp
+ * - files (as string by comma)
+ * - variables (as string by comma)
+ * - hwid
+ *
+ * @param key - avaiable property key
+ * @return - property value, empty string if not found
+ * @example - get_user_property("username") -> "John Doe"
+ */
 string ShieldyApi::get_user_property(const string &key) {
     if (!is_fully_initialized()) { // if not initialized, do not log
         cout << "Please initialize ShieldyApi before usage " << __FUNCTION__  << "()" << endl;
@@ -293,7 +316,18 @@ string ShieldyApi::get_user_property(const string &key) {
     return result;
 }
 
-string ShieldyApi::get_secret(const string &key) {
+/***
+ * Get variable from Shieldy
+ * Variables are securely stored in Shieldy and can be accessed only by Shieldy API
+ * They are encrypted with AES-256 and are decrypted on the fly
+ * Without authorization, this function will return an empty string
+ *
+ * @see https://dashboard.shieldy.app/assets
+ * @param key name of the secret
+ * @return variable value, empty string if not found
+ * @example get_variable("my_secret")
+ */
+string ShieldyApi::get_variable(const string &key) {
     if (!is_fully_initialized()) { // if not initialized, do not log
         cout << "Please initialize ShieldyApi before usage " << __FUNCTION__  << "()" << endl;
         return "";
@@ -301,7 +335,7 @@ string ShieldyApi::get_secret(const string &key) {
 
     string result;
     char *secret = nullptr;
-    if (get_secret_ptr(strdup(key.c_str()), &secret)) {
+    if (get_variable_ptr(strdup(key.c_str()), &secret)) {
         result = secret;
         delete[] secret;
     }
@@ -309,6 +343,16 @@ string ShieldyApi::get_secret(const string &key) {
     return result;
 }
 
+/**
+ * Download file from Shieldy
+ * File must be uploaded to Shieldy dashboard
+ * Files are encrypted with AES with unique key for each app
+ *
+ * @see https://dashboard.shieldy.app/assets
+ * @param key - name of the file, must be the same as in dashboard
+ * @param verbose - if true, will print success and error messages
+ * @return file content as vector of bytes, empty vector if failed
+ */
 vector<unsigned char> ShieldyApi::download_file(const string &key, bool verbose) {
     if (!is_fully_initialized()) { // if not initialized, do not log
         cout << "Please initialize ShieldyApi before usage " << __FUNCTION__  << "()" << endl;
@@ -316,7 +360,6 @@ vector<unsigned char> ShieldyApi::download_file(const string &key, bool verbose)
     }
 
     vector<unsigned char> fileBytes = {};
-    bool status = false;
 
     if (verbose) {
         cout << "Downloading file " << key << endl;
@@ -328,7 +371,6 @@ vector<unsigned char> ShieldyApi::download_file(const string &key, bool verbose)
     if (result) {
         if (verbose) cout << "File downloaded successfully" << endl;
         fileBytes = vector<unsigned char>(fileBuf, fileBuf + fileSize);
-        status = true;
     } else {
         if (verbose) cout << "Failed to download file" << endl;
     }
@@ -337,7 +379,19 @@ vector<unsigned char> ShieldyApi::download_file(const string &key, bool verbose)
     return fileBytes;
 }
 
-string ShieldyApi::deobfuscate_string(const string &key, int rounds) {
+/***
+ * Deobfuscate string
+ * Best way to store sensitive data in your app
+ * For example, you can obfuscate any API key in Shieldy dashboard and deobfuscate it in your app
+ * Strings are encrypted with AES-256 and are decrypted on the fly using unique key for each app
+ * Without authorization, this function will return an empty string
+ *
+ * @param str - obfuscated string in base64
+ * @param rounds - number of rounds, must be the same as returned in dashboard
+ * @return deobfuscated string, empty string if failed
+ * @example deobfuscate_string("Zm9vYmFy", 1) -> "foobar"
+ */
+string ShieldyApi::deobfuscate_string(const string &str, int rounds) {
     if (!is_fully_initialized()) { // if not initialized, do not log
         cout << "Please initialize ShieldyApi before usage " << __FUNCTION__  << "()" << endl;
         return "";
@@ -345,7 +399,7 @@ string ShieldyApi::deobfuscate_string(const string &key, int rounds) {
 
     string result;
     char *secret = nullptr;
-    if (deobf_str_ptr(strdup(key.c_str()), &secret, rounds)) {
+    if (deobf_str_ptr(strdup(str.c_str()), &secret, rounds)) {
         result = secret;
         delete[] secret;
     }
@@ -353,6 +407,16 @@ string ShieldyApi::deobfuscate_string(const string &key, int rounds) {
     return result;
 }
 
+/***
+ * Log custom action to Shieldy dashboard
+ *
+ * All logs are visible in dashboard under "Logs" tab
+ *
+ * @see https://dashboard.shieldy.app/logs
+ * @param text - text to log
+ * @return true if logged successfully
+ * @example log("User logged in");
+ */
 bool ShieldyApi::log(const string &text) {
     if (!is_fully_initialized()) { // if not initialized, do not log
         cout << "Please initialize ShieldyApi before usage " << __FUNCTION__  << "()" << endl;
