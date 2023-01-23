@@ -27,17 +27,18 @@ using namespace std;
 class ShieldyApi {
 private:
     bool late_check = false;
+    string _appGuid;
 
     //<editor-fold desc="native bindings">
     typedef bool (init)(const char *licenseKey, const char *appSecret);
 
-    typedef bool (get_variable_def)(const char *secret, char **buf);
+    typedef bool (get_variable_def)(const char *secretName, char **buf, size_t *size);
 
-    typedef bool (get_user_property_def)(const char *secret, char **buf);
+    typedef bool (get_user_property_def)(const char *secret, char **buf, size_t *size);
 
     typedef bool (get_file_def)(const char *secret, char **fileBuf, size_t *fileSize);
 
-    typedef bool (deobfuscate_string_def)(const char *obfuscatedBase64, char **fileBuf, int rounds);
+    typedef bool (deobfuscate_string_def)(const char *obfB64, int rounds, char **buf, size_t *size);
 
     typedef bool (log_action_def)(const char *text);
 
@@ -73,12 +74,16 @@ private:
 
     static void handle_error_message(const string &msg);
 
+    static string _xor(string val, string key);
+
+    static vector<unsigned char> _xor(vector<unsigned char> toEncrypt, string xorKey);
+
 public:
     /**
      * @brief init native library, should be called just after app start
      * After executing that method you can can call 'is_fully_initialized' method to check if native library is initialized
      */
-    void initialize(const std::string &licenseKey, const std::string &appSecret);
+    void initialize(const std::string &appGuid, const std::string &version);
 
     string get_variable(const string &key);
 

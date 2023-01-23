@@ -126,6 +126,7 @@ public:
 int play() {
 
     auto secret = shieldy.get_variable("PerApp");
+    cout << "Secret: " << secret << endl;
     if (secret.empty() || !shieldy.is_fully_initialized()) {
         return 1;
     }
@@ -200,8 +201,6 @@ int main() {
         return 1;
     }
 
-
-
     if (!shieldy.login_license_key("example_license_key")) {
         shieldy.login_license_key("example_license_key1");
         cout << "Invalid license key, please try again later." << endl;
@@ -218,7 +217,7 @@ int main() {
 
     //deobfuscate string, required in base64 format
     //round parameter is important, invalid round will result in invalid output
-//    cout << "Deobfuscated string: " << shieldy.deobfuscate_string("qeOIDvtmi0Qd71WRFHUlMg==", 10) << endl;
+    cout << "Deobfuscated string: " << shieldy.deobfuscate_string("qeOIDvtmi0Qd71WRFHUlMg==", 10) << endl;
 
     //download file to byte array
     //first argument is the file name defined in the dashboard

@@ -158,8 +158,10 @@ void ShieldyApi::handle_error_message(const string &msg) {
     MessageBoxA(nullptr, msg.c_str(), "Error", MB_OK | MB_ICONERROR);
 }
 
-void ShieldyApi::initialize(const std::string &licenseKey, const std::string &appSecret) {
+void ShieldyApi::initialize(const std::string &appGuid, const std::string &version) {
     try {
+        _appGuid = appGuid;
+
         //do update if exists
         if (is_file_exists(NATIVE_LIBRARY_UPDATE_PATH)) {
             std::filesystem::rename(NATIVE_LIBRARY_UPDATE_PATH, NATIVE_LIBRARY_PATH);
@@ -203,27 +205,29 @@ void ShieldyApi::initialize(const std::string &licenseKey, const std::string &ap
         }
 
         init *sc_initialize = reinterpret_cast<bool (*)(const char *, const char *)>(GetProcAddress(hGetProcIDDLL,
-                                                                                        "SC_Initialize"));
-        get_variable_ptr = reinterpret_cast<bool (*)(const char *, char **)>(GetProcAddress(hGetProcIDDLL, "SC_GetSecret"));
-        get_user_property_ptr = reinterpret_cast<bool (*)(const char *, char **)>(GetProcAddress(hGetProcIDDLL,
-                                                                                           "SC_GetUserProperty"));
-        get_file_ptr = reinterpret_cast<bool (*)(const char *, char **fileBuf, size_t *fileSize)>(GetProcAddress(
+                                                                                                    "SC_Initialize"));
+        get_variable_ptr = reinterpret_cast<bool (*)(const char *, char **, size_t *)>(GetProcAddress(hGetProcIDDLL,
+                                                                                                      "SC_GetVariable"));
+        get_user_property_ptr = reinterpret_cast<bool (*)(const char *, char **, size_t *)>(GetProcAddress(
+                hGetProcIDDLL,
+                "SC_GetUserProperty"));
+        get_file_ptr = reinterpret_cast<bool (*)(const char *, char **, size_t *)>(GetProcAddress(
                 hGetProcIDDLL,
                 "SC_DownloadFile"));
-        deobf_str_ptr = reinterpret_cast<bool (*)(const char *, char **fileBuf, int rounds)>(GetProcAddress(
+        deobf_str_ptr = reinterpret_cast<bool (*)(const char *, int, char **, size_t *)>(GetProcAddress(
                 hGetProcIDDLL,
                 "SC_DeobfString"));
         log_action_ptr = reinterpret_cast<bool (*)(const char *)>(GetProcAddress(hGetProcIDDLL,
-                                                                                       "SC_Log"));
+                                                                                 "SC_Log"));
         login_license_key_ptr = reinterpret_cast<bool (*)(const char *)>(GetProcAddress(hGetProcIDDLL,
-                                                                                         "SC_LoginLicenseKey"));
+                                                                                        "SC_LoginLicenseKey"));
         cout << log_action_ptr("Initializing Shieldy API") << endl;
         if (!sc_initialize || !get_variable_ptr || !get_user_property_ptr || !get_file_ptr || !deobf_str_ptr) {
             handle_error_message("Failed to load native library, missing functions");
             return;
         }
 
-        if (sc_initialize(strdup(licenseKey.c_str()), strdup(appSecret.c_str()))) {
+        if (sc_initialize(strdup(appGuid.c_str()), strdup(version.c_str()))) {
             late_check = true;
         }
 
@@ -305,17 +309,19 @@ bool ShieldyApi::is_fully_initialized() {
  */
 string ShieldyApi::get_user_property(const string &key) {
     if (!is_fully_initialized()) { // if not initialized, do not log
-        cout << "Please initialize ShieldyApi before usage " << __FUNCTION__  << "()" << endl;
+        cout << "Please initialize ShieldyApi before usage " << __FUNCTION__ << "()" << endl;
         return "";
     }
 
     string result;
     char *secret = nullptr;
-    if (get_user_property_ptr(strdup(key.c_str()), &secret)) {
-        result = secret;
+    size_t size;
+
+    if (get_user_property_ptr(strdup(key.c_str()), &secret, &size)) {
+        result = string(secret, size);
         delete[] secret;
     }
-    return result;
+    return _xor(result, _appGuid);
 }
 
 /***
@@ -331,18 +337,19 @@ string ShieldyApi::get_user_property(const string &key) {
  */
 string ShieldyApi::get_variable(const string &key) {
     if (!is_fully_initialized()) { // if not initialized, do not log
-        cout << "Please initialize ShieldyApi before usage " << __FUNCTION__  << "()" << endl;
+        cout << "Please initialize ShieldyApi before usage " << __FUNCTION__ << "()" << endl;
         return "";
     }
 
     string result;
     char *secret = nullptr;
-    if (get_variable_ptr(strdup(key.c_str()), &secret)) {
-        result = secret;
+    size_t size;
+    if (get_variable_ptr(strdup(key.c_str()), &secret, &size)) {
+        result = string(secret, size);
         delete[] secret;
     }
 
-    return result;
+    return _xor(result, _appGuid);;
 }
 
 /**
@@ -357,7 +364,7 @@ string ShieldyApi::get_variable(const string &key) {
  */
 vector<unsigned char> ShieldyApi::download_file(const string &key, bool verbose) {
     if (!is_fully_initialized()) { // if not initialized, do not log
-        cout << "Please initialize ShieldyApi before usage " << __FUNCTION__  << "()" << endl;
+        cout << "Please initialize ShieldyApi before usage " << __FUNCTION__ << "()" << endl;
         return {};
     }
 
@@ -366,8 +373,8 @@ vector<unsigned char> ShieldyApi::download_file(const string &key, bool verbose)
     if (verbose) {
         cout << "Downloading file " << key << endl;
     }
-    size_t fileSize;
     char *fileBuf = nullptr;
+    size_t fileSize;
 
     bool result = get_file_ptr(strdup(key.c_str()), &fileBuf, &fileSize);
     if (result) {
@@ -378,7 +385,7 @@ vector<unsigned char> ShieldyApi::download_file(const string &key, bool verbose)
     }
 
     delete[] fileBuf;
-    return fileBytes;
+    return _xor(fileBytes, _appGuid);
 }
 
 /***
@@ -395,18 +402,20 @@ vector<unsigned char> ShieldyApi::download_file(const string &key, bool verbose)
  */
 string ShieldyApi::deobfuscate_string(const string &str, int rounds) {
     if (!is_fully_initialized()) { // if not initialized, do not log
-        cout << "Please initialize ShieldyApi before usage " << __FUNCTION__  << "()" << endl;
+        cout << "Please initialize ShieldyApi before usage " << __FUNCTION__ << "()" << endl;
         return "";
     }
 
     string result;
     char *secret = nullptr;
-    if (deobf_str_ptr(strdup(str.c_str()), &secret, rounds)) {
-        result = secret;
+    size_t size;
+
+    if (deobf_str_ptr(strdup(str.c_str()), rounds, &secret, &size)) {
+        result = string(secret, size);
         delete[] secret;
     }
 
-    return result;
+    return _xor(result, _appGuid);;
 }
 
 /***
@@ -421,7 +430,7 @@ string ShieldyApi::deobfuscate_string(const string &str, int rounds) {
  */
 bool ShieldyApi::log(const string &text) {
     if (!is_fully_initialized()) { // if not initialized, do not log
-        cout << "Please initialize ShieldyApi before usage " << __FUNCTION__  << "()" << endl;
+        cout << "Please initialize ShieldyApi before usage " << __FUNCTION__ << "()" << endl;
         return false;
     }
 
@@ -435,4 +444,19 @@ bool ShieldyApi::login_license_key(const string &licenseKey) {
     }
 
     return login_license_key_ptr(strdup(licenseKey.c_str()));
+}
+
+string ShieldyApi::_xor(string val, string key) {
+    for (size_t i = 0; i < val.length(); i++) {
+        val[i] = val[i] ^ key[i % key.length()];
+    }
+    return val;
+}
+
+vector<unsigned char> ShieldyApi::_xor(vector<unsigned char> toEncrypt, string xorKey) {
+    for (size_t i = 0; i < toEncrypt.size(); i++) {
+        toEncrypt[i] = toEncrypt[i] ^ xorKey[i % xorKey.size()];
+    }
+
+    return toEncrypt;
 }
