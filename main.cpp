@@ -8,18 +8,18 @@
 ShieldyApi shieldy;
 
 namespace utils {
-    bool save_file(const std::string &path, const std::vector<unsigned char> &data) {
+    bool save_file(const string &path, const vector<unsigned char> &data) {
         try {
-            std::filesystem::path file_path(path);
-            std::filesystem::create_directories(file_path.parent_path());
-            std::ofstream file(path, std::ios::binary | std::ios::out);
+            filesystem::path file_path(path);
+            filesystem::create_directories(file_path.parent_path());
+            ofstream file(path, ios::binary | ios::out);
             if (!file.good()) {
                 cout << "Could not create file at path: " << path << endl;
                 return false;
             }
-            file.write(reinterpret_cast<const char *>(data.data()), static_cast<std::streamsize>(data.size()));
+            file.write(reinterpret_cast<const char *>(data.data()), static_cast<streamsize>(data.size()));
             file.close();
-        } catch (std::exception &e) {
+        } catch (exception &e) {
             cout << "Could not create directories: " << e.what() << endl;
             return false;
         }
@@ -54,10 +54,10 @@ namespace utils {
             outfile << "XXXXXX-XXXXXX-XXXXX";
             outfile.close();
 
-            std::filesystem::path p = licenseKeyPath.c_str();
+            filesystem::path p = licenseKeyPath.c_str();
 
             cout << "License key not found.\nPlease enter valid license key in 'license.txt'\n\nFile created at:\n"
-                 << std::filesystem::absolute(p).string() << endl;
+                 << filesystem::absolute(p).string() << endl;
             exit(0);
         }
         //</editor-fold>
@@ -98,7 +98,7 @@ public:
         hwid = api.get_user_property("hwid");
     }
 
-    friend std::ostream &operator<<(std::ostream &os, const User &user) {
+    friend ostream &operator<<(ostream &os, const User &user) {
         os << "USER" << endl << endl;
         os << "username: " << user.username << endl;
         os << "avatar: " << user.avatar << endl;
@@ -170,14 +170,12 @@ int play() {
 }
 
 //initialize shieldy api
-bool init_shieldy(const string &licenseKey, const string &appSecret) {
+bool init_shieldy(const string &appGuid, const string &version) {
     //assign the api to the global variable and initialize it
     shieldy = ShieldyApi();
-    shieldy.log("Initializing ShieldyApi");
 
-    //first argument is the license key
-    //second argument is the app secret
-    shieldy.initialize(licenseKey, appSecret);
+    //first argument is the app guid, second is the version
+    shieldy.initialize(appGuid, version);
 
     if (!shieldy.is_fully_initialized()) {
         return false;
@@ -191,14 +189,22 @@ int main() {
     cout << "Please wait a moment, we are checking your access.." << endl;
 
     //obained from https://dashboard.shieldy.app
-    string appSecret = "76934b5e-2191-47e2-88a2-a05000a3bbf9";
+    string appGuid = "76934b5e-2191-47e2-88a2-a05000a3bbf9";
 
     //read license key from user via file license.txt
     string key = utils::read_license_key();
 
     //initialize auth api using license key and app secret
-    if (!init_shieldy(key, appSecret)) {
+    if (!init_shieldy(appGuid, "1.0")) {
         cout << "Shieldy is not initialized, please try again later." << endl;
+        return 1;
+    }
+
+
+
+    if (!shieldy.login_license_key("example_license_key")) {
+        shieldy.login_license_key("example_license_key1");
+        cout << "Invalid license key, please try again later." << endl;
         return 1;
     }
 
@@ -212,7 +218,7 @@ int main() {
 
     //deobfuscate string, required in base64 format
     //round parameter is important, invalid round will result in invalid output
-    cout << "Deobfuscated string: " << shieldy.deobfuscate_string("qeOIDvtmi0Qd71WRFHUlMg==", 10) << endl;
+//    cout << "Deobfuscated string: " << shieldy.deobfuscate_string("qeOIDvtmi0Qd71WRFHUlMg==", 10) << endl;
 
     //download file to byte array
     //first argument is the file name defined in the dashboard

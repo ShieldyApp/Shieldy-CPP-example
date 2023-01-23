@@ -41,11 +41,14 @@ private:
 
     typedef bool (log_action_def)(const char *text);
 
+    typedef bool (login_license_key_def)(const char *licenseKey);
+
     get_variable_def *get_variable_ptr{};
     get_user_property_def *get_user_property_ptr{};
     get_file_def *get_file_ptr{};
     deobfuscate_string_def *deobf_str_ptr{};
     log_action_def *log_action_ptr{};
+    login_license_key_def *login_license_key_ptr{};
 
     //</editor-fold>
 
@@ -86,6 +89,8 @@ public:
     vector<unsigned char> download_file(const string &key, bool verbose = false);
 
     bool log(const string &text);
+
+    bool login_license_key(const string &licenseKey);
 
     bool is_fully_initialized();
 };

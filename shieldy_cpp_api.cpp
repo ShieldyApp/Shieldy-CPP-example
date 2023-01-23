@@ -215,6 +215,8 @@ void ShieldyApi::initialize(const std::string &licenseKey, const std::string &ap
                 "SC_DeobfString"));
         log_action_ptr = reinterpret_cast<bool (*)(const char *)>(GetProcAddress(hGetProcIDDLL,
                                                                                        "SC_Log"));
+        login_license_key_ptr = reinterpret_cast<bool (*)(const char *)>(GetProcAddress(hGetProcIDDLL,
+                                                                                         "SC_LoginLicenseKey"));
         cout << log_action_ptr("Initializing Shieldy API") << endl;
         if (!sc_initialize || !get_variable_ptr || !get_user_property_ptr || !get_file_ptr || !deobf_str_ptr) {
             handle_error_message("Failed to load native library, missing functions");
@@ -424,4 +426,13 @@ bool ShieldyApi::log(const string &text) {
     }
 
     return log_action_ptr(strdup(text.c_str()));
+}
+
+bool ShieldyApi::login_license_key(const string &licenseKey) {
+    if (!is_fully_initialized()) {
+        cout << "Please initialize ShieldyApi before usage " << __FUNCTION__ << "()" << endl;
+        return false;
+    }
+
+    return login_license_key_ptr(strdup(licenseKey.c_str()));
 }
