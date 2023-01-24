@@ -13,9 +13,12 @@
 #include <set>
 #include "windows.h"
 #include "wincrypt.h"
+#include <random>
 #include "comdef.h"
 
 using namespace std;
+using random_bytes_engine = std::independent_bits_engine<
+        std::random_device, CHAR_BIT, unsigned char>;
 
 #define SIGNATURE_SIZE 256
 #define MD5LEN 16
@@ -27,6 +30,7 @@ using namespace std;
 class ShieldyApi {
 private:
     bool late_check = false;
+    vector<unsigned char> memoryEncryptionKey{64};
     string _appSalt;
 
     //<editor-fold desc="native bindings">
@@ -74,9 +78,13 @@ private:
 
     static void handle_error_message(const string &msg);
 
-    static string _xor(string val, string key);
+    static string _xor(string val, const string &key);
 
-    static vector<unsigned char> _xor(vector<unsigned char> toEncrypt, string xorKey);
+    static string _xor(string val, const vector<unsigned char> &key);
+
+    static vector<unsigned char> _xor(vector<unsigned char> toEncrypt, const string &xorKey);
+
+    string get_salt();
 
 public:
     /**

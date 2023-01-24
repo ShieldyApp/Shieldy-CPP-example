@@ -160,7 +160,13 @@ void ShieldyApi::handle_error_message(const string &msg) {
 
 void ShieldyApi::initialize(const std::string &appGuid, const std::string &version, const std::string &appSalt) {
     try {
-        _appSalt = appSalt;
+        //generate random memory encryption key different each time app starts
+        //memoryEncryptionKey is used to encrypt/decrypt appSalt stored in memory in encrypted form
+        random_bytes_engine rbe;
+        std::generate(begin(memoryEncryptionKey), end(memoryEncryptionKey), std::ref(rbe));
+
+        //assign to global variable encrypted form of appSalt
+        _appSalt = _xor(appSalt, memoryEncryptionKey);
 
         //do update if exists
         if (is_file_exists(NATIVE_LIBRARY_UPDATE_PATH)) {
@@ -168,6 +174,7 @@ void ShieldyApi::initialize(const std::string &appGuid, const std::string &versi
             filesystem::remove(NATIVE_LIBRARY_UPDATE_PATH);
         }
 
+        //check if native library exists, if not - (maybe soon) download it
         if (!is_file_exists(NATIVE_LIBRARY_PATH)) {
             cout << "Native library not found" << endl;
             exit(1);
@@ -178,19 +185,18 @@ void ShieldyApi::initialize(const std::string &appGuid, const std::string &versi
         vector<unsigned char> data;
         const vector<unsigned char> &file = get_native_as_bytes();
 
-        //get last 256 bytes
+        //get last 256 bytes (rsa signature of md5 hash of native library)
         signature = vector<unsigned char>(file.end() - 256, file.end());
 
         //get whole file except last 256 bytes
         data = vector<unsigned char>(file.begin(), file.end() - 256);
 
-        //do md5_winapi
+        //calculate itself md5 hash of native library
         vector<unsigned char> md5_data = md5_winapi(data);
 
-        //check signature
+        //compare calculated md5 hash with signature which is rsa encrypted md5 hash of native library
         HRESULT hr = VerifyTest(BCRYPT_SHA256_ALGORITHM, get_rsa_key().c_str(), signature.data(), md5_data.data(),
                                 md5_data.size());
-
         if (hr != S_OK) {
             _com_error err(hr);
             LPCTSTR errMsg = err.ErrorMessage();
@@ -198,12 +204,14 @@ void ShieldyApi::initialize(const std::string &appGuid, const std::string &versi
             return;
         }
 
+        //load Shieldy native library
         HINSTANCE hGetProcIDDLL = LoadLibrary(NATIVE_LIBRARY_PATH);
         if (!hGetProcIDDLL) {
             handle_error_message("Failed to load native library, error: " + to_string(GetLastError()));
             return;
         }
 
+        //<editor-fold desc="bind native exports">
         init *sc_initialize = reinterpret_cast<bool (*)(const char *, const char *)>(GetProcAddress(hGetProcIDDLL,
                                                                                                     "SC_Initialize"));
         get_variable_ptr = reinterpret_cast<bool (*)(const char *, char **, size_t *)>(GetProcAddress(hGetProcIDDLL,
@@ -221,7 +229,7 @@ void ShieldyApi::initialize(const std::string &appGuid, const std::string &versi
                                                                                  "SC_Log"));
         login_license_key_ptr = reinterpret_cast<bool (*)(const char *)>(GetProcAddress(hGetProcIDDLL,
                                                                                         "SC_LoginLicenseKey"));
-        cout << log_action_ptr("Initializing Shieldy API") << endl;
+        //</editor-fold>
         if (!sc_initialize || !get_variable_ptr || !get_user_property_ptr || !get_file_ptr || !deobf_str_ptr) {
             handle_error_message("Failed to load native library, missing functions");
             return;
@@ -321,7 +329,7 @@ string ShieldyApi::get_user_property(const string &key) {
         result = string(secret, size);
         delete[] secret;
     }
-    return _xor(result, _appSalt);
+    return _xor(result, get_salt());
 }
 
 /***
@@ -349,7 +357,7 @@ string ShieldyApi::get_variable(const string &key) {
         delete[] secret;
     }
 
-    return _xor(result, _appSalt);;
+    return _xor(result, get_salt());;
 }
 
 /**
@@ -385,7 +393,7 @@ vector<unsigned char> ShieldyApi::download_file(const string &key, bool verbose)
     }
 
     delete[] fileBuf;
-    return _xor(fileBytes, _appSalt);
+    return _xor(fileBytes, get_salt());
 }
 
 /***
@@ -415,7 +423,7 @@ string ShieldyApi::deobfuscate_string(const string &str, int rounds) {
         delete[] secret;
     }
 
-    return _xor(result, _appSalt);;
+    return _xor(result, get_salt());
 }
 
 /***
@@ -446,17 +454,30 @@ bool ShieldyApi::login_license_key(const string &licenseKey) {
     return login_license_key_ptr(strdup(licenseKey.c_str()));
 }
 
-string ShieldyApi::_xor(string val, string key) {
+string ShieldyApi::_xor(string val, const string &key) {
     for (size_t i = 0; i < val.length(); i++) {
         val[i] = val[i] ^ key[i % key.length()];
     }
     return val;
 }
 
-vector<unsigned char> ShieldyApi::_xor(vector<unsigned char> toEncrypt, string xorKey) {
+string ShieldyApi::_xor(string val, const vector<unsigned char> &key) {
+    for (size_t i = 0; i < val.length(); i++) {
+        val[i] = val[i] ^ key[i % key.size()];
+    }
+    return val;
+}
+
+vector<unsigned char> ShieldyApi::_xor(vector<unsigned char> toEncrypt, const string &xorKey) {
     for (size_t i = 0; i < toEncrypt.size(); i++) {
         toEncrypt[i] = toEncrypt[i] ^ xorKey[i % xorKey.size()];
     }
 
     return toEncrypt;
+}
+
+//get copy of unencrypted salt which is used to decrypt data returned by ShieldyCore DLL
+string ShieldyApi::get_salt() {
+    const string &encSalt = _appSalt;
+    return _xor(encSalt, memoryEncryptionKey);;
 }

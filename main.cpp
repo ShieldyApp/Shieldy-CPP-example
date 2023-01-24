@@ -193,7 +193,7 @@ int main() {
     string appGuid = "76934b5e-2191-47e2-88a2-a05000a3bbf9";
     string appSalt = "6166edbd36aec11af66e722e40baa2c7645387f28efe4e60abcc454723f6439e";
 
-    //read license key from user via file license.txt
+    //read license key from user via file license.txt or use GUI
     string key = utils::read_license_key();
 
     //initialize auth api using license key and app secret
