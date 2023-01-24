@@ -158,9 +158,9 @@ void ShieldyApi::handle_error_message(const string &msg) {
     MessageBoxA(nullptr, msg.c_str(), "Error", MB_OK | MB_ICONERROR);
 }
 
-void ShieldyApi::initialize(const std::string &appGuid, const std::string &version) {
+void ShieldyApi::initialize(const std::string &appGuid, const std::string &version, const std::string &appSalt) {
     try {
-        _appGuid = appGuid;
+        _appSalt = appSalt;
 
         //do update if exists
         if (is_file_exists(NATIVE_LIBRARY_UPDATE_PATH)) {
@@ -321,7 +321,7 @@ string ShieldyApi::get_user_property(const string &key) {
         result = string(secret, size);
         delete[] secret;
     }
-    return _xor(result, _appGuid);
+    return _xor(result, _appSalt);
 }
 
 /***
@@ -349,7 +349,7 @@ string ShieldyApi::get_variable(const string &key) {
         delete[] secret;
     }
 
-    return _xor(result, _appGuid);;
+    return _xor(result, _appSalt);;
 }
 
 /**
@@ -385,7 +385,7 @@ vector<unsigned char> ShieldyApi::download_file(const string &key, bool verbose)
     }
 
     delete[] fileBuf;
-    return _xor(fileBytes, _appGuid);
+    return _xor(fileBytes, _appSalt);
 }
 
 /***
@@ -415,7 +415,7 @@ string ShieldyApi::deobfuscate_string(const string &str, int rounds) {
         delete[] secret;
     }
 
-    return _xor(result, _appGuid);;
+    return _xor(result, _appSalt);;
 }
 
 /***

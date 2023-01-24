@@ -171,12 +171,12 @@ int play() {
 }
 
 //initialize shieldy api
-bool init_shieldy(const string &appGuid, const string &version) {
+bool init_shieldy(const string &appGuid, const string &version, const std::string &appSalt) {
     //assign the api to the global variable and initialize it
     shieldy = ShieldyApi();
 
     //first argument is the app guid, second is the version
-    shieldy.initialize(appGuid, version);
+    shieldy.initialize(appGuid, version, appSalt);
 
     if (!shieldy.is_fully_initialized()) {
         return false;
@@ -191,12 +191,13 @@ int main() {
 
     //obained from https://dashboard.shieldy.app
     string appGuid = "76934b5e-2191-47e2-88a2-a05000a3bbf9";
+    string appSalt = "6166edbd36aec11af66e722e40baa2c7645387f28efe4e60abcc454723f6439e";
 
     //read license key from user via file license.txt
     string key = utils::read_license_key();
 
     //initialize auth api using license key and app secret
-    if (!init_shieldy(appGuid, "1.0")) {
+    if (!init_shieldy(appGuid, "1.0", appSalt)) {
         cout << "Shieldy is not initialized, please try again later." << endl;
         return 1;
     }
