@@ -5,180 +5,185 @@
 #include "board.h"
 
 //global variable which allow to access the api from anywhere
-ShieldyApi shieldy;
+ShieldyApi *shieldy;
 
 namespace utils {
-    bool save_file(const string &path, const vector<unsigned char> &data) {
+    bool save_file(const std::string &path, const std::vector<unsigned char> &data) {
         try {
-            filesystem::path file_path(path);
-            filesystem::create_directories(file_path.parent_path());
-            ofstream file(path, ios::binary | ios::out);
+            std::filesystem::path file_path(path);
+            std::filesystem::create_directories(file_path.parent_path());
+            std::ofstream file(path, std::ios::binary | std::ios::out);
             if (!file.good()) {
-                cout << "Could not create file at path: " << path << endl;
+                std::cout << "Could not create file at path: " << path << std::endl;
                 return false;
             }
-            file.write(reinterpret_cast<const char *>(data.data()), static_cast<streamsize>(data.size()));
+            file.write(reinterpret_cast<const char *>(data.data()), static_cast<std::streamsize>(data.size()));
             file.close();
-        } catch (exception &e) {
-            cout << "Could not create directories: " << e.what() << endl;
+        } catch (std::exception &e) {
+            std::cout << "Could not create directories: " << e.what() << std::endl;
             return false;
         }
         return true;
     }
 
-    vector<string> split_string(const string &i_str, const string &i_delim) {
-        vector<string> result;
+    std::vector<std::string> split_string(const std::string &i_str, const std::string &i_delim) {
+        std::vector<std::string> result;
 
         size_t found = i_str.find(i_delim);
         size_t startIndex = 0;
 
-        while (found != string::npos) {
-            result.push_back(string(i_str.begin() + startIndex, i_str.begin() + found));
+        while (found != std::string::npos) {
+            result.push_back(std::string(i_str.begin() + startIndex, i_str.begin() + found));
             startIndex = found + i_delim.size();
             found = i_str.find(i_delim, startIndex);
         }
         if (startIndex != i_str.size())
-            result.push_back(string(i_str.begin() + startIndex, i_str.end()));
+            result.push_back(std::string(i_str.begin() + startIndex, i_str.end()));
         return result;
     }
 
     //you can read license key from file or using gui, its only example
-    string read_license_key() {
-        string licenseKeyPath = "license.txt";
+    std::string read_license_key() {
+        std::string licenseKeyPath = "license.txt";
 
-        ifstream iostream(licenseKeyPath.c_str());
+        std::ifstream iostream(licenseKeyPath.c_str());
 
         //<editor-fold desc="license file not exists">
         if (!iostream.good()) {
-            ofstream outfile(licenseKeyPath.c_str());
+            std::ofstream outfile(licenseKeyPath.c_str());
             outfile << "XXXXXX-XXXXXX-XXXXX";
             outfile.close();
 
-            filesystem::path p = licenseKeyPath.c_str();
+            std::filesystem::path p = licenseKeyPath.c_str();
 
-            cout << "License key not found.\nPlease enter valid license key in 'license.txt'\n\nFile created at:\n"
-                 << filesystem::absolute(p).string() << endl;
+            std::cout << "License key not found.\nPlease enter valid license key in 'license.txt'\n\nFile created at:\n"
+                      << std::filesystem::absolute(p).string() << std::endl;
             exit(0);
         }
         //</editor-fold>
-        stringstream buffer;
+        std::stringstream buffer;
         buffer << iostream.rdbuf();
 
         return buffer.str();
     }
+
+    void handle_action(int code) {
+        //use ErrorCodes enum
+        switch (code) {
+            case INITIALIZE_APP_VERSION_INVALID:
+                std::cout << "Version of the app is invalid, please download update on https://example.com"
+                          << std::endl;
+                break;
+            case INITIALIZE_APP_DISABLED:
+                std::cout << "App is disabled, please contact support on https://example.com" << std::endl;
+                break;
+            case AUTH_LICENSE_NOT_FOUND:
+                std::cout << "" << std::endl;
+                break;
+            case AUTH_USER_HWID_LIMIT_REACHED:
+                std::cout << "AUTH_USER_HWID_LIMIT_REACHED" << std::endl;
+                break;
+            case AUTH_USER_LICENSE_EXPIRED:
+                std::cout << "AUTH_USER_LICENSE_EXPIRED" << std::endl;
+                break;
+            case AUTH_USER_COUNTRY_BANNED:
+                std::cout << "AUTH_USER_COUNTRY_BANNED" << std::endl;
+                break;
+            case AUTH_EXECUTABLE_SIGNATURE_INVALID:
+                std::cout << "AUTH_EXECUTABLE_SIGNATURE_INVALID" << std::endl;
+                break;
+            case AUTH_SESSION_INVALIDATED:
+                std::cout << "AUTH_SESSION_INVALIDATED" << std::endl;
+                break;
+            case AUTH_SESSION_ALREADY_USED:
+                std::cout << "AUTH_SESSION_ALREADY_USED" << std::endl;
+                break;
+            case OTHER_VM_CHECK:
+                std::cout << "OTHER_VM_CHECK" << std::endl;
+                break;
+            default:
+                std::cout << "UNKNOWN ERROR" << std::endl;
+                break;
+        }
+    }
+
+    void message_callback(int code, const char *message) {
+        std::cout << "Message received: " << message << std::endl;
+    }
 }
 
-//example User object which contains user data obtained from api
-class User {
+namespace base {
+    //src: https://github.com/zachbellay/tictactoe
+    int play() {
 
-public:
-    string username;
-    string avatar;
-    int accessLevel = 0;
-    int licenseCreated = 0;
-    int licenseExpiry = 0;
-    int hwidLimit = 0;
-    int lastAccessDate = 0;
-    string lastAccessIp;
-    vector<string> files = {};
-    vector<string> variables = {};
-    string hwid;
-
-    explicit User(ShieldyApi api) {
-        username = api.get_user_property("username");
-        avatar = api.get_user_property("avatar");
-        accessLevel = stoi(api.get_user_property("accessLevel"));
-        licenseCreated = stoi(api.get_user_property("licenseCreated"));
-        licenseExpiry = stoi(api.get_user_property("licenseExpiry"));
-        hwidLimit = stoi(api.get_user_property("hwidLimit"));
-        lastAccessDate = stoi(api.get_user_property("lastAccessDate"));
-        lastAccessIp = api.get_user_property("lastAccessIp");
-        files = utils::split_string(api.get_user_property("files"), ";");
-        variables = utils::split_string(api.get_user_property("variables"), ";");
-        hwid = api.get_user_property("hwid");
-    }
-
-    friend ostream &operator<<(ostream &os, const User &user) {
-        os << "USER" << endl << endl;
-        os << "username: " << user.username << endl;
-        os << "avatar: " << user.avatar << endl;
-        os << "accessLevel: " << user.accessLevel << endl;
-        os << "licenseCreated: " << user.licenseCreated << endl;
-        os << "licenseExpiry: " << user.licenseExpiry << endl;
-        os << "hwidLimit: " << user.hwidLimit << endl;
-        os << "lastAccessDate: " << user.lastAccessDate << endl;
-        os << "lastAccessIp: " << user.lastAccessIp << endl;
-        os << "files: " << endl;
-        for (auto &file: user.files) {
-            os << file << endl;
+        //late checks are recommended, to detect memory modifications
+        auto secret = shieldy->get_variable("PerApp");
+        if (secret.empty() || !shieldy->is_fully_initialized()) {
+            return -3;
         }
-        os << "variables: " << endl;
-        for (auto &variable: user.variables) {
-            os << variable << endl;
-        }
-        os << "hwid: " << user.hwid << endl;
-        os << endl;
-        return os;
-    }
-};
 
-//src: https://github.com/zachbellay/tictactoe
-int play() {
+        int board_size;
+        bool x_turn = true;
 
-    auto secret = shieldy.get_variable("PerApp");
-    cout << "Secret: " << secret << endl;
-    if (secret.empty() || !shieldy.is_fully_initialized()) {
-        return 1;
-    }
-
-    int board_size;
-    bool x_turn = true;
-
-    cout << "2 Player Tic Tac Toe:" << endl;
-    cout << "How large should the board be? (Enter a whole number): ";
-    cin >> board_size;
-    tictactoe::board b(board_size);
-    while (!b.x_win() && !b.o_win()) {
-        cout << string(50, '\n');
-        cout << b;
-        if (x_turn) {
-            bool inserted = false;
-            while (!inserted) {
-                int pos;
-                cout << "X, enter the position you want to insert at: ";
-                cin >> pos;
-                inserted = b.x_insert(pos);
-                x_turn = false;
+        std::cout << "2 Player Tic Tac Toe:" << std::endl;
+        std::cout << "How large should the board be? (Enter a whole number): ";
+        std::cin >> board_size;
+        tictactoe::board board(board_size);
+        while (!board.x_win() && !board.o_win()) {
+            std::cout << std::string(50, '\n');
+            std::cout << board;
+            if (x_turn) {
+                bool inserted = false;
+                while (!inserted) {
+                    int pos;
+                    std::cout << "X, enter the position you want to insert at: ";
+                    std::cin >> pos;
+                    inserted = board.x_insert(pos);
+                    x_turn = false;
+                }
+            } else {
+                bool inserted = false;
+                while (!inserted) {
+                    int pos;
+                    std::cout << "O, enter the position you want to insert at: ";
+                    std::cin >> pos;
+                    inserted = board.o_insert(pos);
+                    x_turn = true;
+                }
             }
-        } else {
-            bool inserted = false;
-            while (!inserted) {
-                int pos;
-                cout << "O, enter the position you want to insert at: ";
-                cin >> pos;
-                inserted = b.o_insert(pos);
-                x_turn = true;
+            std::cout << board;
+            if (board.x_win()) {
+                std::cout << "X has won!" << std::endl;
+            } else {
+                std::cout << "O has won!" << std::endl;
             }
         }
-        cout << b;
-        if (b.x_win()) {
-            cout << "X has won!" << endl;
-        } else {
-            cout << "O has won!" << endl;
-        }
+        return EXIT_SUCCESS;
     }
-    return EXIT_SUCCESS;
 }
 
-//initialize shieldy api
-bool init_shieldy(const string &appGuid, const string &version, const std::string &appSalt) {
-    //assign the api to the global variable and initialize it
-    shieldy = ShieldyApi();
+bool init() {
+    //initialize global variable
+    shieldy = new ShieldyApi();
 
-    //first argument is the app guid, second is the version
-    shieldy.initialize(appGuid, version, appSalt);
+    //obained from https://dashboard.shieldy.app
+    std::string version = "1.0";
+    std::string appGuid = "76934b5e-2191-47e2-88a2-a05000a3bbf9";
+    std::vector<unsigned char> appSalt = {0x61, 0x66, 0xed, 0xbd, 0x36, 0xae, 0xc1, 0x1a, 0xf6, 0x6e, 0x72, 0x2e, 0x40,
+                                          0xba, 0xa2, 0xc7, 0x64, 0x53, 0x87, 0xf2, 0x8e, 0xfe, 0x4e, 0x60, 0xab, 0xcc,
+                                          0x45, 0x47, 0x23, 0xf6, 0x43, 0x9e};
 
-    if (!shieldy.is_fully_initialized()) {
+    //initialize auth api using license licenseKey and app secret
+    if (!shieldy->initialize(appGuid, version, appSalt, utils::message_callback)) {
+        std::cout << "Failed to initialize application." << std::endl;
+        return false;
+    }
+
+    //read license licenseKey from user via file license.txt or use GUI
+    std::string licenseKey = utils::read_license_key();
+
+    if (!shieldy->login_license_key(licenseKey)) {
+        std::cout << "Login failed" << std::endl;
         return false;
     }
 
@@ -186,48 +191,34 @@ bool init_shieldy(const string &appGuid, const string &version, const std::strin
 }
 
 int main() {
-    cout << "Hello there!" << endl;
-    cout << "Please wait a moment, we are checking your access.." << endl;
+    std::cout << "Hello there!" << std::endl;
+    std::cout << "Please wait a moment, we are checking your access.." << std::endl;
 
-    //obained from https://dashboard.shieldy.app
-    string appGuid = "76934b5e-2191-47e2-88a2-a05000a3bbf9";
-    string appSalt = "6166edbd36aec11af66e722e40baa2c7645387f28efe4e60abcc454723f6439e";
+    if (!init()) return 1;
 
-    //read license key from user via file license.txt or use GUI
-    string key = utils::read_license_key();
-
-    //initialize auth api using license key and app secret
-    if (!init_shieldy(appGuid, "1.0", appSalt)) {
-        cout << "Shieldy is not initialized, please try again later." << endl;
-        return 1;
-    }
-
-    if (!shieldy.login_license_key("example_license_key")) {
-        shieldy.login_license_key("example_license_key1");
-        cout << "Invalid license key, please try again later." << endl;
-        return 1;
-    }
 
     //log your custom message, and it will be shown in the dashboard along with user, hwid, ip, etc.
-    shieldy.log("User " + shieldy.get_user_property("username") + " has logged in");
+//    shieldy.log("User " + shieldy.get_user_property("username") + " has logged in | ' OR '5'='5' /*");
 
     //print user info
-    User user = User(shieldy);
-    cout << "Access granted, have fun " << user.username << endl << endl;
-    cout << "Your hwid is: " << user.hwid << endl;
+    std::cout << "Access granted, have fun! " << std::endl << std::endl;
+    License *license = shieldy->get_license();
 
-    //deobfuscate string, required in base64 format
+    std::cout << license->to_string() << std::endl;
+
+    //deobfuscate std::string, required in base64 format
     //round parameter is important, invalid round will result in invalid output
-    cout << "Deobfuscated string: " << shieldy.deobfuscate_string("qeOIDvtmi0Qd71WRFHUlMg==", 10) << endl;
+    std::cout << "Deobfuscated std::string: " << shieldy->deobfuscate_string("qeOIDvtmi0Qd71WRFHUlMg==", 10)
+              << std::endl;
 
     //download file to byte array
     //first argument is the file name defined in the dashboard
-    vector<unsigned char> downloadFile = shieldy.download_file("ScoopyNG.zip", true);
+    /*std::vector<unsigned char> downloadFile = shieldy.download_file("ScoopyNG.zip", true);
     if (!downloadFile.empty()) {
-        cout << "File downloaded, size: " << downloadFile.size() << endl;
+        std::cout << "File downloaded, size: " << downloadFile.size() << std::endl;
         utils::save_file("testowa/ScoopyNG.zip", downloadFile);
-    }
+    }*/
 
-    play();
+    base::play();
     return 0;
 }

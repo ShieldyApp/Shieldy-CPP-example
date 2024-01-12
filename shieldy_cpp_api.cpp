@@ -4,7 +4,7 @@
 
 #include "shieldy_cpp_api.h"
 
-string ShieldyApi::get_rsa_key() {
+std::string ShieldyApi::get_rsa_key() {
     //load public key
     //<editor-fold desc="public key">
     unsigned char s[] =
@@ -88,22 +88,22 @@ string ShieldyApi::get_rsa_key() {
         s[m] = c;
     }
     //</editor-fold>
-    string a(reinterpret_cast<const char *>(s));
+    std::string a(reinterpret_cast<const char *>(s));
     return a;
 }
 
-bool ShieldyApi::is_file_exists(const string &name) {
-    ifstream f(name.c_str());
+bool ShieldyApi::is_file_exists(const std::string &name) {
+    std::ifstream f(name.c_str());
     return f.good();
 }
 
-vector<unsigned char> ShieldyApi::get_native_as_bytes() {
-    vector<unsigned char> data;
-    string libPath = "lib/native.dll";
+std::vector<unsigned char> ShieldyApi::get_native_as_bytes() {
+    std::vector<unsigned char> data;
+    std::string libPath = "lib/native.dll";
 
-    ifstream libFile(libPath, ios::binary);
+    std::ifstream libFile(libPath, std::ios::binary);
     // Read the entire file into a vector
-    data.assign(istreambuf_iterator<char>(libFile), istreambuf_iterator<char>());
+    data.assign(std::istreambuf_iterator<char>(libFile), std::istreambuf_iterator<char>());
 
     return data;
 }
@@ -130,23 +130,32 @@ HRESULT ShieldyApi::StringToBin(PDATA_BLOB pdb, ULONG dwFlags, PCSTR pszString, 
     return HRESULT_FROM_WIN32(GetLastError());
 }
 
-vector<unsigned char> ShieldyApi::md5_winapi(vector<unsigned char> data) {
+std::vector<unsigned char> ShieldyApi::sha256_winapi(std::vector<unsigned char> data) {
     HCRYPTPROV hProv = 0;
     HCRYPTHASH hHash = 0;
     DWORD cbHash = 0;
     DWORD dwCount = 0;
     BYTE rgbHash[MD5LEN];
-    vector<unsigned char> result;
-    if (CryptAcquireContext(&hProv, nullptr, nullptr, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT)) {
-        if (CryptCreateHash(hProv, CALG_MD5, 0, 0, &hHash)) {
-            if (CryptHashData(hHash, &data[0], data.size(), 0)) {
-                cbHash = MD5LEN;
-                if (CryptGetHashParam(hHash, HP_HASHVAL, rgbHash, &cbHash, 0)) {
-                    for (dwCount = 0; dwCount < cbHash; dwCount++) {
-                        result.push_back(rgbHash[dwCount]);
-                    }
-                }
-            }
+    std::vector<unsigned char> result;
+    if (!CryptAcquireContext(&hProv, nullptr, nullptr, PROV_RSA_AES, CRYPT_VERIFYCONTEXT)) {
+        std::cout << "CryptAcquireContext failed, error " << GetLastError() << std::endl;
+        return result;
+    }
+    if (!CryptCreateHash(hProv, CALG_SHA_256, 0, 0, &hHash)) {
+        std::cout << "CryptCreateHash failed, error " << get_last_error_string() << std::endl;
+        return result;
+    }
+    if (!CryptHashData(hHash, &data[0], data.size(), 0)) {
+        std::cout << "CryptHashData failed, error " << get_last_error_string() << std::endl;
+        return result;
+    }
+    cbHash = MD5LEN;
+    if (!CryptGetHashParam(hHash, HP_HASHVAL, rgbHash, &cbHash, 0)) {
+        std::cout << "CryptGetHashParam failed, error " << get_last_error_string() << std::endl;
+        return result;
+    } else {
+        for (dwCount = 0; dwCount < cbHash; dwCount++) {
+            result.push_back(rgbHash[dwCount]);
         }
     }
     CryptDestroyHash(hHash);
@@ -154,16 +163,20 @@ vector<unsigned char> ShieldyApi::md5_winapi(vector<unsigned char> data) {
     return result;
 }
 
-void ShieldyApi::handle_error_message(const string &msg) {
+void ShieldyApi::handle_error_message(const std::string &msg) {
     MessageBoxA(nullptr, msg.c_str(), "Error", MB_OK | MB_ICONERROR);
 }
 
-void ShieldyApi::initialize(const std::string &appGuid, const std::string &version, const std::string &appSalt) {
+bool ShieldyApi::initialize(const std::string &appGuid, const std::string &version,
+                            const std::vector<unsigned char> &appSaltVec, MessageCallback messageCallback,
+                            DownloadProgressCallback downloadProgressCallback) {
     try {
         //generate random memory encryption key different each time app starts
         //memoryEncryptionKey is used to encrypt/decrypt appSalt stored in memory in encrypted form
         random_bytes_engine rbe;
         std::generate(begin(memoryEncryptionKey), end(memoryEncryptionKey), std::ref(rbe));
+
+        std::string appSalt = std::string(appSaltVec.begin(), appSaltVec.end());
 
         //assign to global variable encrypted form of appSalt
         _appSalt = _xor(appSalt, memoryEncryptionKey);
@@ -171,28 +184,27 @@ void ShieldyApi::initialize(const std::string &appGuid, const std::string &versi
         //do update if exists
         if (is_file_exists(NATIVE_LIBRARY_UPDATE_PATH)) {
             std::filesystem::rename(NATIVE_LIBRARY_UPDATE_PATH, NATIVE_LIBRARY_PATH);
-            filesystem::remove(NATIVE_LIBRARY_UPDATE_PATH);
+            std::filesystem::remove(NATIVE_LIBRARY_UPDATE_PATH);
         }
 
         //check if native library exists, if not - (maybe soon) download it
         if (!is_file_exists(NATIVE_LIBRARY_PATH)) {
-            cout << "Native library not found" << endl;
+            std::cout << "Native library not found" << std::endl;
             exit(1);
-            return;
         }
 
-        vector<unsigned char> signature;
-        vector<unsigned char> data;
-        const vector<unsigned char> &file = get_native_as_bytes();
+        std::vector<unsigned char> signature;
+        std::vector<unsigned char> data;
+        const std::vector<unsigned char> &file = get_native_as_bytes();
 
         //get last 256 bytes (rsa signature of md5 hash of native library)
-        signature = vector<unsigned char>(file.end() - 256, file.end());
+        signature = std::vector<unsigned char>(file.end() - 256, file.end());
 
         //get whole file except last 256 bytes
-        data = vector<unsigned char>(file.begin(), file.end() - 256);
+        data = std::vector<unsigned char>(file.begin(), file.end() - 256);
 
         //calculate itself md5 hash of native library
-        vector<unsigned char> md5_data = md5_winapi(data);
+        std::vector<unsigned char> md5_data = sha256_winapi(data);
 
         //compare calculated md5 hash with signature which is rsa encrypted md5 hash of native library
         HRESULT hr = VerifyTest(BCRYPT_SHA256_ALGORITHM, get_rsa_key().c_str(), signature.data(), md5_data.data(),
@@ -200,20 +212,21 @@ void ShieldyApi::initialize(const std::string &appGuid, const std::string &versi
         if (hr != S_OK) {
             _com_error err(hr);
             LPCTSTR errMsg = err.ErrorMessage();
-            handle_error_message("Signature verification failed, error: " + string(errMsg));
-            return;
+            handle_error_message("Signature verification failed, error: " + std::string(errMsg));
+            return false;
         }
 
         //load Shieldy native library
         HINSTANCE hGetProcIDDLL = LoadLibrary(NATIVE_LIBRARY_PATH);
         if (!hGetProcIDDLL) {
-            handle_error_message("Failed to load native library, error: " + to_string(GetLastError()));
-            return;
+            handle_error_message("Failed to load native library, error: " + std::to_string(GetLastError()));
+            return false;
         }
 
         //<editor-fold desc="bind native exports">
-        init *sc_initialize = reinterpret_cast<bool (*)(const char *, const char *)>(GetProcAddress(hGetProcIDDLL,
-                                                                                                    "SC_Initialize"));
+        auto *sc_initialize = reinterpret_cast<bool (*)(const char *, const char *, MessageCallback,
+                                                        DownloadProgressCallback)>(GetProcAddress(hGetProcIDDLL,
+                                                                                                  "SC_Initialize"));
         get_variable_ptr = reinterpret_cast<bool (*)(const char *, char **, size_t *)>(GetProcAddress(hGetProcIDDLL,
                                                                                                       "SC_GetVariable"));
         get_user_property_ptr = reinterpret_cast<bool (*)(const char *, char **, size_t *)>(GetProcAddress(
@@ -229,18 +242,27 @@ void ShieldyApi::initialize(const std::string &appGuid, const std::string &versi
                                                                                  "SC_Log"));
         login_license_key_ptr = reinterpret_cast<bool (*)(const char *)>(GetProcAddress(hGetProcIDDLL,
                                                                                         "SC_LoginLicenseKey"));
+        get_last_error_ptr = reinterpret_cast<int (*)()>(GetProcAddress(hGetProcIDDLL,
+                                                                        "SC_GetLastError"));
         //</editor-fold>
-        if (!sc_initialize || !get_variable_ptr || !get_user_property_ptr || !get_file_ptr || !deobf_str_ptr) {
+        if (!sc_initialize || !get_variable_ptr || !get_user_property_ptr || !get_file_ptr || !deobf_str_ptr ||
+            !log_action_ptr || !login_license_key_ptr || !get_last_error_ptr) {
             handle_error_message("Failed to load native library, missing functions");
-            return;
+            return false;
         }
 
-        if (sc_initialize(strdup(appGuid.c_str()), strdup(version.c_str()))) {
+        if (sc_initialize(strdup(appGuid.c_str()), strdup(version.c_str()), messageCallback, nullptr)) {
             late_check = true;
+            std::cout << "Native library initialized" << std::endl;
+            return true;
         }
 
-    } catch (exception &e) {
-        handle_error_message("Failed to verify native library, error: " + string(e.what()));
+        handle_error_message("Failed to initialize native library, error: " + std::to_string(get_last_error_ptr()));
+        return false;
+
+    } catch (std::exception &e) {
+        handle_error_message("Failed to initialize native library, error: " + std::string(e.what()));
+        return false;
     }
 }
 
@@ -315,18 +337,18 @@ bool ShieldyApi::is_fully_initialized() {
  * @return - property value, empty string if not found
  * @example - get_user_property("username") -> "John Doe"
  */
-string ShieldyApi::get_user_property(const string &key) {
+std::string ShieldyApi::get_user_property(const std::string &key) {
     if (!is_fully_initialized()) { // if not initialized, do not log
-        cout << "Please initialize ShieldyApi before usage " << __FUNCTION__ << "()" << endl;
+        std::cout << "Please initialize ShieldyApi before usage " << __FUNCTION__ << "()" << std::endl;
         return "";
     }
 
-    string result;
+    std::string result;
     char *secret = nullptr;
     size_t size;
 
     if (get_user_property_ptr(strdup(key.c_str()), &secret, &size)) {
-        result = string(secret, size);
+        result = std::string(secret, size);
         delete[] secret;
     }
     return _xor(result, get_salt());
@@ -343,17 +365,17 @@ string ShieldyApi::get_user_property(const string &key) {
  * @return variable value, empty string if not found
  * @example get_variable("my_secret")
  */
-string ShieldyApi::get_variable(const string &key) {
+std::string ShieldyApi::get_variable(const std::string &key) {
     if (!is_fully_initialized()) { // if not initialized, do not log
-        cout << "Please initialize ShieldyApi before usage " << __FUNCTION__ << "()" << endl;
+        std::cout << "Please initialize ShieldyApi before usage " << __FUNCTION__ << "()" << std::endl;
         return "";
     }
 
-    string result;
+    std::string result;
     char *secret = nullptr;
     size_t size;
     if (get_variable_ptr(strdup(key.c_str()), &secret, &size)) {
-        result = string(secret, size);
+        result = std::string(secret, size);
         delete[] secret;
     }
 
@@ -370,26 +392,26 @@ string ShieldyApi::get_variable(const string &key) {
  * @param verbose - if true, will print success and error messages
  * @return file content as vector of bytes, empty vector if failed
  */
-vector<unsigned char> ShieldyApi::download_file(const string &key, bool verbose) {
+std::vector<unsigned char> ShieldyApi::download_file(const std::string &key, bool verbose) {
     if (!is_fully_initialized()) { // if not initialized, do not log
-        cout << "Please initialize ShieldyApi before usage " << __FUNCTION__ << "()" << endl;
+        std::cout << "Please initialize ShieldyApi before usage " << __FUNCTION__ << "()" << std::endl;
         return {};
     }
 
-    vector<unsigned char> fileBytes = {};
+    std::vector<unsigned char> fileBytes = {};
 
     if (verbose) {
-        cout << "Downloading file " << key << endl;
+        std::cout << "Downloading file " << key << std::endl;
     }
     char *fileBuf = nullptr;
     size_t fileSize;
 
     bool result = get_file_ptr(strdup(key.c_str()), &fileBuf, &fileSize);
     if (result) {
-        if (verbose) cout << "File downloaded successfully" << endl;
-        fileBytes = vector<unsigned char>(fileBuf, fileBuf + fileSize);
+        if (verbose) std::cout << "File downloaded successfully" << std::endl;
+        fileBytes = std::vector<unsigned char>(fileBuf, fileBuf + fileSize);
     } else {
-        if (verbose) cout << "Failed to download file" << endl;
+        if (verbose) std::cout << "Failed to download file" << std::endl;
     }
 
     delete[] fileBuf;
@@ -408,18 +430,18 @@ vector<unsigned char> ShieldyApi::download_file(const string &key, bool verbose)
  * @return deobfuscated string, empty string if failed
  * @example deobfuscate_string("Zm9vYmFy", 1) -> "foobar"
  */
-string ShieldyApi::deobfuscate_string(const string &str, int rounds) {
+std::string ShieldyApi::deobfuscate_string(const std::string &str, int rounds) {
     if (!is_fully_initialized()) { // if not initialized, do not log
-        cout << "Please initialize ShieldyApi before usage " << __FUNCTION__ << "()" << endl;
+        std::cout << "Please initialize ShieldyApi before usage " << __FUNCTION__ << "()" << std::endl;
         return "";
     }
 
-    string result;
+    std::string result;
     char *secret = nullptr;
     size_t size;
 
     if (deobf_str_ptr(strdup(str.c_str()), rounds, &secret, &size)) {
-        result = string(secret, size);
+        result = std::string(secret, size);
         delete[] secret;
     }
 
@@ -436,39 +458,51 @@ string ShieldyApi::deobfuscate_string(const string &str, int rounds) {
  * @return true if logged successfully
  * @example log("User logged in");
  */
-bool ShieldyApi::log(const string &text) {
+bool ShieldyApi::log(const std::string &text) {
     if (!is_fully_initialized()) { // if not initialized, do not log
-        cout << "Please initialize ShieldyApi before usage " << __FUNCTION__ << "()" << endl;
+        std::cout << "Please initialize ShieldyApi before usage " << __FUNCTION__ << "()" << std::endl;
         return false;
     }
 
     return log_action_ptr(strdup(text.c_str()));
 }
 
-bool ShieldyApi::login_license_key(const string &licenseKey) {
+bool ShieldyApi::login_license_key(const std::string &licenseKey) {
     if (!is_fully_initialized()) {
-        cout << "Please initialize ShieldyApi before usage " << __FUNCTION__ << "()" << endl;
+        std::cout << "Please initialize ShieldyApi before usage " << __FUNCTION__ << "()" << std::endl;
         return false;
     }
 
-    return login_license_key_ptr(strdup(licenseKey.c_str()));
+    if (!login_license_key_ptr(strdup(licenseKey.c_str()))) {
+        return false;
+    }
+
+    std::string takedHwidSeats = get_user_property("hwid_taken_seats");
+    std::string totalHwidSeats = get_user_property("hwid_total_seats");
+    std::string licenseLevel = get_user_property("license_level");
+    std::string licenseCreated = get_user_property("license_created");
+    std::string licenseExpiry = get_user_property("license_expiry");
+
+    _license = std::make_shared<License>(takedHwidSeats, totalHwidSeats, licenseLevel, licenseCreated, licenseExpiry);
+
+    return true;
 }
 
-string ShieldyApi::_xor(string val, const string &key) {
+std::string ShieldyApi::_xor(std::string val, const std::string &key) {
     for (size_t i = 0; i < val.length(); i++) {
         val[i] = val[i] ^ key[i % key.length()];
     }
     return val;
 }
 
-string ShieldyApi::_xor(string val, const vector<unsigned char> &key) {
+std::string ShieldyApi::_xor(std::string val, const std::vector<unsigned char> &key) {
     for (size_t i = 0; i < val.length(); i++) {
         val[i] = val[i] ^ key[i % key.size()];
     }
     return val;
 }
 
-vector<unsigned char> ShieldyApi::_xor(vector<unsigned char> toEncrypt, const string &xorKey) {
+std::vector<unsigned char> ShieldyApi::_xor(std::vector<unsigned char> toEncrypt, const std::string &xorKey) {
     for (size_t i = 0; i < toEncrypt.size(); i++) {
         toEncrypt[i] = toEncrypt[i] ^ xorKey[i % xorKey.size()];
     }
@@ -477,7 +511,54 @@ vector<unsigned char> ShieldyApi::_xor(vector<unsigned char> toEncrypt, const st
 }
 
 //get copy of unencrypted salt which is used to decrypt data returned by ShieldyCore DLL
-string ShieldyApi::get_salt() {
-    const string &encSalt = _appSalt;
+std::string ShieldyApi::get_salt() {
+    //copy encrypted salt to new string
+    const std::string &encSalt = _appSalt;
     return _xor(encSalt, memoryEncryptionKey);;
+}
+
+/*
+ * Get last error code
+ * @return error code which corresponds to ShieldyErrorCodes
+ * @warning this function may be restricted only to paid users
+ */
+int ShieldyApi::get_last_error() {
+    if (!is_fully_initialized()) {
+        std::cout << "Please initialize ShieldyApi before usage " << __FUNCTION__ << "()" << std::endl;
+        return -1;
+    }
+    return get_last_error_ptr();
+}
+
+std::string ShieldyApi::get_last_error_string() {
+    //Get the error message ID, if any.
+    DWORD errorMessageID = ::GetLastError();
+    if (errorMessageID == 0) {
+        return {}; //No error message has been recorded
+    }
+
+    LPSTR messageBuffer = nullptr;
+
+    //Ask Win32 to give us the string version of that message ID.
+    //The parameters we pass in, tell Win32 to create the buffer that holds the message for us (because we don't yet know how long the message string will be).
+    size_t size = FormatMessageA(
+            FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+            nullptr, errorMessageID, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR) &messageBuffer, 0, nullptr);
+
+    //Copy the error message into a std::string.
+    std::string message(messageBuffer, size);
+
+    //Free the Win32's string's buffer.
+    LocalFree(messageBuffer);
+
+    return message;
+}
+
+License *ShieldyApi::get_license() {
+    if (!is_fully_initialized()) {
+        std::cout << "Please initialize ShieldyApi before usage " << __FUNCTION__ << "()" << std::endl;
+        return nullptr;
+    }
+
+    return _license.get();
 }

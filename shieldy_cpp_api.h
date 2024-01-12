@@ -8,6 +8,7 @@
 #include <iostream>
 #include <string>
 #include <fstream>
+#include <utility>
 #include <vector>
 #include <filesystem>
 #include <set>
@@ -16,25 +17,67 @@
 #include <random>
 #include "comdef.h"
 
-using namespace std;
 using random_bytes_engine = std::independent_bits_engine<
         std::random_device, CHAR_BIT, unsigned char>;
 
-#define SIGNATURE_SIZE 256
-#define MD5LEN 16
-#define NATIVE_LIBRARY_PATH "lib/native.dll"
-#define NATIVE_LIBRARY_UPDATE_PATH "lib/native.update"
+constexpr int SIGNATURE_SIZE = 256;
+constexpr int MD5LEN = 32;
+constexpr const char *NATIVE_LIBRARY_PATH = "lib/native.dll";
+constexpr const char *NATIVE_LIBRARY_UPDATE_PATH = "lib/native.update";
+
+typedef void (*MessageCallback)(int code, const char *message);
+typedef void (*DownloadProgressCallback)(float progress);
+
+enum ShieldyErrorCodes : int {
+    INITIALIZE_APP_VERSION_INVALID = 1002,
+    INITIALIZE_APP_DISABLED = 1004,
+    INITIALIZE_APP_BANNED = 1005,
+    INITIALIZE_SUCCESS = 1009,
+    AUTH_LICENSE_NOT_FOUND = 1102,
+    AUTH_USER_HWID_LIMIT_REACHED = 1104,
+    AUTH_USER_LICENSE_EXPIRED = 1105,
+    AUTH_USER_COUNTRY_BANNED = 1106,
+    AUTH_EXECUTABLE_SIGNATURE_INVALID = 1111,
+    AUTH_SESSION_INVALIDATED = 1113,
+    AUTH_SESSION_ALREADY_USED = 1114,
+    OTHER_VM_CHECK = 2000
+};
 
 #endif //CPPSHIELDYEXAMPLEWINAPI_SHIELDY_CPP_API_H
+
+class License {
+public:
+    std::string takedHwidSeats;
+    std::string totalHwidSeats;
+    std::string licenseLevel;
+    std::string licenseCreated;
+    std::string licenseExpiry;
+
+    License(std::string takedHwidSeats, std::string totalHwidSeats, std::string licenseLevel,
+            std::string licenseCreated, std::string licenseExpiry) : takedHwidSeats(std::move(takedHwidSeats)),
+                                                                     totalHwidSeats(std::move(totalHwidSeats)),
+                                                                     licenseLevel(std::move(licenseLevel)),
+                                                                     licenseCreated(std::move(licenseCreated)),
+                                                                     licenseExpiry(std::move(licenseExpiry)) {}
+
+    std::string to_string() const {
+        return "License{takedHwidSeats='" + takedHwidSeats + "', totalHwidSeats='" + totalHwidSeats +
+               "', licenseLevel='" + licenseLevel + "', licenseCreated='" + licenseCreated +
+               "', licenseExpiry='" + licenseExpiry + "'}";
+    }
+
+};
 
 class ShieldyApi {
 private:
     bool late_check = false;
-    vector<unsigned char> memoryEncryptionKey{64};
-    string _appSalt;
+    std::vector<unsigned char> memoryEncryptionKey{64};
+    std::string _appSalt;
+    std::shared_ptr<License> _license;
 
     //<editor-fold desc="native bindings">
-    typedef bool (init)(const char *licenseKey, const char *appSecret);
+    typedef bool (init_def)(const char *licenseKey, const char *appSecret, MessageCallback messageCallback,
+                            DownloadProgressCallback downloadProgressCallback);
 
     typedef bool (get_variable_def)(const char *secretName, char **buf, size_t *size);
 
@@ -48,25 +91,29 @@ private:
 
     typedef bool (login_license_key_def)(const char *licenseKey);
 
+    typedef int (get_last_error_def)();
+
     get_variable_def *get_variable_ptr{};
     get_user_property_def *get_user_property_ptr{};
     get_file_def *get_file_ptr{};
     deobfuscate_string_def *deobf_str_ptr{};
     log_action_def *log_action_ptr{};
     login_license_key_def *login_license_key_ptr{};
+    get_last_error_def *get_last_error_ptr{};
 
     //</editor-fold>
-
-    static string get_rsa_key();
+    static std::string get_rsa_key();
 
     static bool is_file_exists(const std::string &name);
 
-    static vector<unsigned char> get_native_as_bytes();
+    static std::vector<unsigned char> get_native_as_bytes();
 
     static inline ULONG BOOL_TO_ERROR(BOOL f);
 
     static HRESULT
     StringToBin(_Out_ PDATA_BLOB pdb, _In_ ULONG dwFlags, _In_ PCSTR pszString, _In_ ULONG cchString = 0);
+
+    static std::string get_last_error_string();
 
     static HRESULT VerifyTest(_In_ PCWSTR algorithm,
                               _In_ PCSTR keyAsPem,
@@ -74,37 +121,42 @@ private:
                               _In_ const UCHAR *dataToCheck,
                               _In_ ULONG dataToCheckSize);
 
-    static vector<unsigned char> md5_winapi(vector<unsigned char> data);
+    static std::vector<unsigned char> sha256_winapi(std::vector<unsigned char> data);
 
-    static void handle_error_message(const string &msg);
+    static void handle_error_message(const std::string &msg);
 
-    static string _xor(string val, const string &key);
+    static std::string _xor(std::string val, const std::string &key);
 
-    static string _xor(string val, const vector<unsigned char> &key);
+    static std::string _xor(std::string val, const std::vector<unsigned char> &key);
 
-    static vector<unsigned char> _xor(vector<unsigned char> toEncrypt, const string &xorKey);
+    static std::vector<unsigned char> _xor(std::vector<unsigned char> toEncrypt, const std::string &xorKey);
 
-    string get_salt();
+    std::string get_salt();
 
 public:
     /**
-     * @brief init native library, should be called just after app start
+     * @brief init_def native library, should be called just after app start
      * After executing that method you can can call 'is_fully_initialized' method to check if native library is initialized
      */
-    void initialize(const std::string &appGuid, const std::string &version, const std::string &appSalt);
+    bool initialize(const std::string &appGuid, const std::string &version, const std::vector<unsigned char> &appSalt, MessageCallback messageCallback = nullptr,
+                    DownloadProgressCallback downloadProgressCallback = nullptr);
 
-    string get_variable(const string &key);
+    std::string get_variable(const std::string &key);
 
-    string get_user_property(const string &key);
+    std::string get_user_property(const std::string &key);
 
-    string deobfuscate_string(const string &str, int rounds);
+    std::string deobfuscate_string(const std::string &str, int rounds);
 
-    vector<unsigned char> download_file(const string &key, bool verbose = false);
+    std::vector<unsigned char> download_file(const std::string &key, bool verbose = false);
 
-    bool log(const string &text);
+    bool log(const std::string &text);
 
-    bool login_license_key(const string &licenseKey);
+    bool login_license_key(const std::string &licenseKey);
 
     bool is_fully_initialized();
+
+    int get_last_error();
+
+    License *get_license();
 };
 
