@@ -1,11 +1,15 @@
 #include <iostream>
 #include <string>
 #include <thread>
-#include "shieldy_cpp_api.h"
+#include <vector>
+#include <filesystem>
+#include <fstream>
+
+#include "shieldy_api.h"
 #include "board.h"
 
 //global variable which allow to access the api from anywhere
-ShieldyApi *shieldy;
+//ShieldyApi *shieldy;
 
 namespace utils {
     bool save_file(const std::string &path, const std::vector<unsigned char> &data) {
@@ -33,12 +37,12 @@ namespace utils {
         size_t startIndex = 0;
 
         while (found != std::string::npos) {
-            result.push_back(std::string(i_str.begin() + startIndex, i_str.begin() + found));
+            result.emplace_back(i_str.begin() + startIndex, i_str.begin() + found);
             startIndex = found + i_delim.size();
             found = i_str.find(i_delim, startIndex);
         }
         if (startIndex != i_str.size())
-            result.push_back(std::string(i_str.begin() + startIndex, i_str.end()));
+            result.emplace_back(i_str.begin() + startIndex, i_str.end());
         return result;
     }
 
@@ -108,7 +112,11 @@ namespace utils {
     }
 
     void message_callback(int code, const char *message) {
-        std::cout << "Message received: " << message << std::endl;
+        std::cout << "CALLBACK Message received: " << message << std::endl;
+    }
+
+    void progress_callback(float progress) {
+        std::cout << "CALLBACK Progress received: " << progress << std::endl;
     }
 }
 
@@ -174,7 +182,7 @@ bool init() {
                                           0x45, 0x47, 0x23, 0xf6, 0x43, 0x9e};
 
     //initialize auth api using license licenseKey and app secret
-    if (!shieldy->initialize(appGuid, version, appSalt, utils::message_callback)) {
+    if (!shieldy->initialize(appGuid, version, appSalt, utils::message_callback, utils::progress_callback)) {
         std::cout << "Failed to initialize application." << std::endl;
         return false;
     }
@@ -198,27 +206,30 @@ int main() {
 
 
     //log your custom message, and it will be shown in the dashboard along with user, hwid, ip, etc.
-//    shieldy.log("User " + shieldy.get_user_property("username") + " has logged in | ' OR '5'='5' /*");
+//    shieldy.log("User " + shieldy.get_license_property("username") + " has logged in | ' OR '5'='5' /*");
 
     //print user info
     std::cout << "Access granted, have fun! " << std::endl << std::endl;
-    License *license = shieldy->get_license();
+    int *test = nullptr;
+    *test = 5;
+//    License *license = shieldy->get_license();
 
-    std::cout << license->to_string() << std::endl;
+//    std::cout << license->to_string() << std::endl;
 
     //deobfuscate std::string, required in base64 format
     //round parameter is important, invalid round will result in invalid output
-    std::cout << "Deobfuscated std::string: " << shieldy->deobfuscate_string("qeOIDvtmi0Qd71WRFHUlMg==", 10)
-              << std::endl;
+//    std::cout << "Deobfuscated std::string: " << shieldy->deobfuscate_string("qeOIDvtmi0Qd71WRFHUlMg==", 10)
+//              << std::endl;
 
     //download file to byte array
     //first argument is the file name defined in the dashboard
-    /*std::vector<unsigned char> downloadFile = shieldy.download_file("ScoopyNG.zip", true);
-    if (!downloadFile.empty()) {
-        std::cout << "File downloaded, size: " << downloadFile.size() << std::endl;
-        utils::save_file("testowa/ScoopyNG.zip", downloadFile);
-    }*/
+//    std::vector<unsigned char> downloadFile = shieldy->download_file("C42064CD-9E51-48EF-A871-0E0644C07582.gif", true);
+//    if (!downloadFile.empty()) {
+//        std::cout << "File downloaded, size: " << downloadFile.size() << std::endl;
+//        utils::save_file("testowa/ScoopyNG.zip", downloadFile);
+//    }
 
-    base::play();
+//    base::play();
+    std::cin.get();
     return 0;
 }

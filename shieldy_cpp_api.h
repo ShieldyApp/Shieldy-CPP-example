@@ -15,6 +15,7 @@
 #include "windows.h"
 #include "wincrypt.h"
 #include <random>
+#include <algorithm>
 #include "comdef.h"
 
 using random_bytes_engine = std::independent_bits_engine<
@@ -22,7 +23,7 @@ using random_bytes_engine = std::independent_bits_engine<
 
 constexpr int SIGNATURE_SIZE = 256;
 constexpr int MD5LEN = 32;
-constexpr const char *NATIVE_LIBRARY_PATH = "lib/native.dll";
+constexpr const char *NATIVE_LIBRARY_PATH = R"(C:\Users\Kaspek\CLionProjects\=SHIELDY=\ShieldyCore\cmake-builds\windows-x64-dev\cpp-module\native.dll)";
 constexpr const char *NATIVE_LIBRARY_UPDATE_PATH = "lib/native.update";
 
 typedef void (*MessageCallback)(int code, const char *message);
@@ -47,23 +48,23 @@ enum ShieldyErrorCodes : int {
 
 class License {
 public:
-    std::string takedHwidSeats;
-    std::string totalHwidSeats;
-    std::string licenseLevel;
-    std::string licenseCreated;
-    std::string licenseExpiry;
+    std::string mTakedHwidSeats;
+    std::string mTotalHwidSeats;
+    std::string mLicenseLevel;
+    std::string mLicenseCreated;
+    std::string mLicenseExpiry;
 
     License(std::string takedHwidSeats, std::string totalHwidSeats, std::string licenseLevel,
-            std::string licenseCreated, std::string licenseExpiry) : takedHwidSeats(std::move(takedHwidSeats)),
-                                                                     totalHwidSeats(std::move(totalHwidSeats)),
-                                                                     licenseLevel(std::move(licenseLevel)),
-                                                                     licenseCreated(std::move(licenseCreated)),
-                                                                     licenseExpiry(std::move(licenseExpiry)) {}
+            std::string licenseCreated, std::string licenseExpiry) : mTakedHwidSeats(std::move(takedHwidSeats)),
+                                                                     mTotalHwidSeats(std::move(totalHwidSeats)),
+                                                                     mLicenseLevel(std::move(licenseLevel)),
+                                                                     mLicenseCreated(std::move(licenseCreated)),
+                                                                     mLicenseExpiry(std::move(licenseExpiry)) {}
 
     std::string to_string() const {
-        return "License{takedHwidSeats='" + takedHwidSeats + "', totalHwidSeats='" + totalHwidSeats +
-               "', licenseLevel='" + licenseLevel + "', licenseCreated='" + licenseCreated +
-               "', licenseExpiry='" + licenseExpiry + "'}";
+        return "License{takedHwidSeats='" + mTakedHwidSeats + "', totalHwidSeats='" + mTotalHwidSeats +
+               "', licenseLevel='" + mLicenseLevel + "', licenseCreated='" + mLicenseCreated +
+               "', licenseExpiry='" + mLicenseExpiry + "'}";
     }
 
 };
@@ -81,7 +82,7 @@ private:
 
     typedef bool (get_variable_def)(const char *secretName, char **buf, size_t *size);
 
-    typedef bool (get_user_property_def)(const char *secret, char **buf, size_t *size);
+    typedef bool (get_license_property_def)(const char *secret, char **buf, size_t *size);
 
     typedef bool (get_file_def)(const char *secret, char **fileBuf, size_t *fileSize);
 
@@ -93,13 +94,16 @@ private:
 
     typedef int (get_last_error_def)();
 
+    typedef void (free_memory_def)(void *ptr);
+
     get_variable_def *get_variable_ptr{};
-    get_user_property_def *get_user_property_ptr{};
+    get_license_property_def *get_license_property_ptr{};
     get_file_def *get_file_ptr{};
     deobfuscate_string_def *deobf_str_ptr{};
     log_action_def *log_action_ptr{};
     login_license_key_def *login_license_key_ptr{};
     get_last_error_def *get_last_error_ptr{};
+    free_memory_def *free_memory_ptr{};
 
     //</editor-fold>
     static std::string get_rsa_key();
@@ -143,7 +147,7 @@ public:
 
     std::string get_variable(const std::string &key);
 
-    std::string get_user_property(const std::string &key);
+    std::string get_license_property(const std::string &key);
 
     std::string deobfuscate_string(const std::string &str, int rounds);
 
@@ -153,7 +157,7 @@ public:
 
     bool login_license_key(const std::string &licenseKey);
 
-    bool is_fully_initialized();
+    bool is_fully_initialized() const;
 
     int get_last_error();
 

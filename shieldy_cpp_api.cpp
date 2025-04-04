@@ -176,6 +176,7 @@ bool ShieldyApi::initialize(const std::string &appGuid, const std::string &versi
         random_bytes_engine rbe;
         std::generate(begin(memoryEncryptionKey), end(memoryEncryptionKey), std::ref(rbe));
 
+
         std::string appSalt = std::string(appSaltVec.begin(), appSaltVec.end());
 
         //assign to global variable encrypted form of appSalt
@@ -213,7 +214,7 @@ bool ShieldyApi::initialize(const std::string &appGuid, const std::string &versi
             _com_error err(hr);
             LPCTSTR errMsg = err.ErrorMessage();
             handle_error_message("Signature verification failed, error: " + std::string(errMsg));
-            return false;
+//            return false;
         }
 
         //load Shieldy native library
@@ -224,14 +225,16 @@ bool ShieldyApi::initialize(const std::string &appGuid, const std::string &versi
         }
 
         //<editor-fold desc="bind native exports">
-        auto *sc_initialize = reinterpret_cast<bool (*)(const char *, const char *, MessageCallback,
+        auto *sc_initialize = reinterpret_cast<bool (*)(const char *, const char *, int, MessageCallback,
                                                         DownloadProgressCallback)>(GetProcAddress(hGetProcIDDLL,
                                                                                                   "SC_Initialize"));
-        get_variable_ptr = reinterpret_cast<bool (*)(const char *, char **, size_t *)>(GetProcAddress(hGetProcIDDLL,
-                                                                                                      "SC_GetVariable"));
-        get_user_property_ptr = reinterpret_cast<bool (*)(const char *, char **, size_t *)>(GetProcAddress(
+        get_variable_ptr = reinterpret_cast<bool (*)(const char *, char **, size_t *)>(GetProcAddress(
                 hGetProcIDDLL,
-                "SC_GetUserProperty"));
+                "SC_GetVariable"));
+        get_license_property_ptr = reinterpret_cast<bool (*)(const char *, char **,
+                                                             size_t *)>(GetProcAddress(
+                hGetProcIDDLL,
+                "SC_GetLicenseProperty"));
         get_file_ptr = reinterpret_cast<bool (*)(const char *, char **, size_t *)>(GetProcAddress(
                 hGetProcIDDLL,
                 "SC_DownloadFile"));
@@ -240,24 +243,27 @@ bool ShieldyApi::initialize(const std::string &appGuid, const std::string &versi
                 "SC_DeobfString"));
         log_action_ptr = reinterpret_cast<bool (*)(const char *)>(GetProcAddress(hGetProcIDDLL,
                                                                                  "SC_Log"));
-        login_license_key_ptr = reinterpret_cast<bool (*)(const char *)>(GetProcAddress(hGetProcIDDLL,
-                                                                                        "SC_LoginLicenseKey"));
+        login_license_key_ptr = reinterpret_cast<bool (*)(const char *)>(GetProcAddress(
+                hGetProcIDDLL,
+                "SC_LoginLicenseKey"));
         get_last_error_ptr = reinterpret_cast<int (*)()>(GetProcAddress(hGetProcIDDLL,
                                                                         "SC_GetLastError"));
+        free_memory_ptr = reinterpret_cast<void (*)(void *)>(GetProcAddress(hGetProcIDDLL,
+                                                                            "SC_FreeMemory"));
         //</editor-fold>
-        if (!sc_initialize || !get_variable_ptr || !get_user_property_ptr || !get_file_ptr || !deobf_str_ptr ||
+        /*if (!sc_initialize || !get_variable_ptr || !get_license_property_ptr || !get_file_ptr || !deobf_str_ptr ||
             !log_action_ptr || !login_license_key_ptr || !get_last_error_ptr) {
             handle_error_message("Failed to load native library, missing functions");
             return false;
-        }
+        }*/
 
-        if (sc_initialize(strdup(appGuid.c_str()), strdup(version.c_str()), messageCallback, nullptr)) {
+        if (sc_initialize(appGuid.c_str(), version.c_str(), 1, messageCallback, downloadProgressCallback)) {
             late_check = true;
             std::cout << "Native library initialized" << std::endl;
             return true;
         }
 
-        handle_error_message("Failed to initialize native library, error: " + std::to_string(get_last_error_ptr()));
+        handle_error_message("Failed to initialize native library");
         return false;
 
     } catch (std::exception &e) {
@@ -314,7 +320,7 @@ HRESULT ShieldyApi::VerifyTest(PCWSTR algorithm, PCSTR keyAsPem, BYTE *signature
 /***
  * @return - true if user successfully logged in, false otherwise
  */
-bool ShieldyApi::is_fully_initialized() {
+bool ShieldyApi::is_fully_initialized() const {
     return late_check;
 }
 
@@ -335,22 +341,25 @@ bool ShieldyApi::is_fully_initialized() {
  *
  * @param key - avaiable property key
  * @return - property value, empty string if not found
- * @example - get_user_property("username") -> "John Doe"
+ * @example - get_license_property("username") -> "John Doe"
  */
-std::string ShieldyApi::get_user_property(const std::string &key) {
+std::string ShieldyApi::get_license_property(const std::string &key) {
     if (!is_fully_initialized()) { // if not initialized, do not log
         std::cout << "Please initialize ShieldyApi before usage " << __FUNCTION__ << "()" << std::endl;
         return "";
     }
 
-    std::string result;
     char *secret = nullptr;
     size_t size;
 
-    if (get_user_property_ptr(strdup(key.c_str()), &secret, &size)) {
-        result = std::string(secret, size);
-        delete[] secret;
+    if (!get_license_property_ptr(key.c_str(), &secret, &size)) {
+        std::cout << "Failed to get license property" << std::endl;
+        return "";
     }
+
+    std::string result = std::string(secret, size);
+    free_memory_ptr(&secret);
+
     return _xor(result, get_salt());
 }
 
@@ -374,7 +383,7 @@ std::string ShieldyApi::get_variable(const std::string &key) {
     std::string result;
     char *secret = nullptr;
     size_t size;
-    if (get_variable_ptr(strdup(key.c_str()), &secret, &size)) {
+    if (get_variable_ptr(key.c_str(), &secret, &size)) {
         result = std::string(secret, size);
         delete[] secret;
     }
@@ -406,7 +415,7 @@ std::vector<unsigned char> ShieldyApi::download_file(const std::string &key, boo
     char *fileBuf = nullptr;
     size_t fileSize;
 
-    bool result = get_file_ptr(strdup(key.c_str()), &fileBuf, &fileSize);
+    bool result = get_file_ptr(key.c_str(), &fileBuf, &fileSize);
     if (result) {
         if (verbose) std::cout << "File downloaded successfully" << std::endl;
         fileBytes = std::vector<unsigned char>(fileBuf, fileBuf + fileSize);
@@ -440,7 +449,7 @@ std::string ShieldyApi::deobfuscate_string(const std::string &str, int rounds) {
     char *secret = nullptr;
     size_t size;
 
-    if (deobf_str_ptr(strdup(str.c_str()), rounds, &secret, &size)) {
+    if (deobf_str_ptr(str.c_str(), rounds, &secret, &size)) {
         result = std::string(secret, size);
         delete[] secret;
     }
@@ -464,7 +473,7 @@ bool ShieldyApi::log(const std::string &text) {
         return false;
     }
 
-    return log_action_ptr(strdup(text.c_str()));
+    return log_action_ptr(text.c_str());
 }
 
 bool ShieldyApi::login_license_key(const std::string &licenseKey) {
@@ -473,15 +482,15 @@ bool ShieldyApi::login_license_key(const std::string &licenseKey) {
         return false;
     }
 
-    if (!login_license_key_ptr(strdup(licenseKey.c_str()))) {
+    if (!login_license_key_ptr(licenseKey.c_str())) {
         return false;
     }
 
-    std::string takedHwidSeats = get_user_property("hwid_taken_seats");
-    std::string totalHwidSeats = get_user_property("hwid_total_seats");
-    std::string licenseLevel = get_user_property("license_level");
-    std::string licenseCreated = get_user_property("license_created");
-    std::string licenseExpiry = get_user_property("license_expiry");
+    std::string takedHwidSeats = get_license_property("hwid_taken_seats");
+    std::string totalHwidSeats = get_license_property("hwid_total_seats");
+    std::string licenseLevel = get_license_property("license_level");
+    std::string licenseCreated = get_license_property("license_created");
+    std::string licenseExpiry = get_license_property("license_expiry");
 
     _license = std::make_shared<License>(takedHwidSeats, totalHwidSeats, licenseLevel, licenseCreated, licenseExpiry);
 
@@ -496,7 +505,7 @@ std::string ShieldyApi::_xor(std::string val, const std::string &key) {
 }
 
 std::string ShieldyApi::_xor(std::string val, const std::vector<unsigned char> &key) {
-    for (size_t i = 0; i < val.length(); i++) {
+    for (size_t i = 0; i  < val.length(); i++) {
         val[i] = val[i] ^ key[i % key.size()];
     }
     return val;
@@ -514,7 +523,7 @@ std::vector<unsigned char> ShieldyApi::_xor(std::vector<unsigned char> toEncrypt
 std::string ShieldyApi::get_salt() {
     //copy encrypted salt to new string
     const std::string &encSalt = _appSalt;
-    return _xor(encSalt, memoryEncryptionKey);;
+    return _xor(encSalt, memoryEncryptionKey);
 }
 
 /*
