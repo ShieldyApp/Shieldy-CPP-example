@@ -9,50 +9,6 @@ bool shieldy_sdk::is_file_exists(const std::string &name) {
     return f.good();
 }
 
-void shieldy_sdk::generate_secure_random_bytes(unsigned char *buffer, size_t size) {
-    bool success = false;
-
-#ifdef _WIN32
-    HCRYPTPROV hProvider;
-    if (CryptAcquireContext(&hProvider, nullptr, nullptr, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT)) {
-        if (CryptGenRandom(hProvider, size, buffer)) {
-            success = true;
-        }
-        CryptReleaseContext(hProvider, 0);
-    }
-#else
-    std::ifstream urandom("/dev/urandom", std::ios::in | std::ios::binary);
-    if (urandom) {
-        urandom.read(reinterpret_cast<char*>(buffer), size);
-        if (urandom.gcount() == static_cast<std::streamsize>(size)) {
-            success = true;
-        }
-    }
-#endif
-
-    //if failed to generate secure random bytes, use pseudo random generator
-    if (!success) {
-        std::random_device rd;
-        for (size_t i = 0; i < size; ++i) {
-            buffer[i] = rd() % 256;
-        }
-    }
-}
-
-void shieldy_sdk::xor_bytes(unsigned char *data, size_t dataSize, const unsigned char *key, size_t keySize) {
-    for (size_t i = 0; i < dataSize; i++) {
-        data[i] = data[i] ^ key[i % keySize];
-    }
-}
-
-void shieldy_sdk::secure_zero_memory(unsigned char *data, size_t size) {
-#if defined(_WIN32)
-    SecureZeroMemory(data, size);
-#else
-    std::fill(data, data + size, 0);
-#endif
-}
-
 std::string shieldy_sdk::get_rsa_key() {
     //load public key
     //<editor-fold desc="public key">
@@ -195,26 +151,6 @@ void shieldy_sdk::xor_bytes(char *data, size_t dataSize, const unsigned char *ke
     }
 }
 
-std::vector<std::string> shieldy_sdk::split(const std::string &str, char delimiter) {
-    std::vector<std::string> result;
-    std::stringstream ss(str);
-    std::string item;
-
-    while (std::getline(ss, item, delimiter)) {
-        result.push_back(item);
-    }
-
-    return result;
-}
-
-std::string shieldy_sdk::vector_to_hex(const std::vector<unsigned char> &data) {
-    std::ostringstream os;
-    for (unsigned char i: data) {
-        os << std::hex << std::setfill('0') << std::setw(2) << (int) i;
-    }
-    return os.str();
-}
-
 ULONG shieldy_sdk::win_utils::BOOL_TO_ERROR(WINBOOL f) {
     return f ? NOERROR : GetLastError();
 }
@@ -350,116 +286,6 @@ shieldy_sdk::win_utils::rsa_verify(PCWSTR algorithm, PCSTR keyAsPem, BYTE *signa
     return HRESULT_FROM_WIN32(hr);
 }
 
-std::string dh_tests::vector_to_hex(const std::vector<unsigned char> &data) {
-    std::ostringstream os;
-    for (unsigned char i: data) {
-        os << std::hex << std::setfill('0') << std::setw(2) << (int) i;
-    }
-    return os.str();
-}
-
-std::string dh_tests::sha256_to_hex(const uint8_t *data, size_t size, int trunc) {
-    SHA256_CTX ctx;
-    sha256_init(&ctx);
-    sha256_update(&ctx, data, size);
-    uint8_t hash[SHA256_BLOCK_SIZE];
-    sha256_final(&ctx, hash);
-    if (trunc > 0) {
-        std::ostringstream os;
-        for (int i = 0; i < trunc; i++) {
-            os << std::hex << std::setfill('0') << std::setw(2) << (int) hash[i];
-        }
-        return os.str();
-    } else {
-        return vector_to_hex(std::vector<unsigned char>(hash, hash + SHA256_BLOCK_SIZE));
-    }
-}
-
-/*std::vector<unsigned char> encrypt(uint8_t *key, uint8_t *data, size_t data_size) {
-    std::vector<unsigned char> AAD = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
-    std::vector<unsigned char> nonce;
-    nonce.resize(CHACHA20_NONCE_BYTES); //CHACHA20_NONCE_BYTES = 12
-
-    shieldy_sdk::generate_secure_random_bytes(nonce.data(), CHACHA20_NONCE_BYTES);
-
-    std::vector<unsigned char> cipherText;
-    cipherText.resize(data_size);
-
-    std::vector<unsigned char> authTag; //POLY1305_MAC_BYTES = 16
-    authTag.resize(POLY1305_MAC_BYTES);
-
-    ChaCha20_Poly1305::aead_encrypt(cipherText.data(), authTag.data(), data, data_size, AAD.data(), AAD.size(), key,
-                                    nonce.data());
-
-    //CHACHA20_NONCE_BYTES + POLY1305_MAC_BYTES + data_size
-    std::vector<unsigned char> outVec;
-    outVec.insert(outVec.end(), nonce.begin(), nonce.end());
-    outVec.insert(outVec.end(), authTag.begin(), authTag.end());
-    outVec.insert(outVec.end(), cipherText.begin(), cipherText.end());
-
-    std::cout << "Encrypted data: " << dh_tests::vector_to_hex(cipherText) << std::endl;
-    std::cout << "Auth tag: " << dh_tests::vector_to_hex(authTag) << std::endl;
-    std::cout << "Nonce: " << dh_tests::vector_to_hex(nonce) << std::endl;
-    std::cout << "Full: " << dh_tests::vector_to_hex(outVec) << std::endl;
-
-
-    return outVec;
-}
-
-bool decrypt(uint8_t *key, std::vector<unsigned char> &data, std::vector<unsigned char> &out) {
-    std::vector<unsigned char> AAD = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
-
-    std::vector<unsigned char> nonce;
-    nonce.resize(CHACHA20_NONCE_BYTES); //CHACHA20_NONCE_BYTES = 12
-
-    std::vector<unsigned char> authTag; //POLY1305_MAC_BYTES = 16
-    authTag.resize(POLY1305_MAC_BYTES);
-
-    std::vector<unsigned char> cipherText;
-    cipherText.resize(data.size() - CHACHA20_NONCE_BYTES - POLY1305_MAC_BYTES);
-
-    std::copy(data.begin(), data.begin() + CHACHA20_NONCE_BYTES, nonce.begin());
-    std::copy(data.begin() + CHACHA20_NONCE_BYTES, data.begin() + CHACHA20_NONCE_BYTES + POLY1305_MAC_BYTES,
-              authTag.begin());
-    std::copy(data.begin() + CHACHA20_NONCE_BYTES + POLY1305_MAC_BYTES, data.end(), cipherText.begin());
-
-    std::vector<unsigned char> decryptedAuthTag;
-    decryptedAuthTag.resize(POLY1305_MAC_BYTES);
-
-    std::vector<unsigned char> decryptedData;
-    decryptedData.resize(cipherText.size());
-
-    ChaCha20_Poly1305::aead_decrypt(decryptedData.data(), decryptedAuthTag.data(), cipherText.data(), cipherText.size(),
-                                    AAD.data(), AAD.size(),
-                                    key, nonce.data());
-
-    std::cout << "Decrypted data: " << std::endl;
-    for (const auto &c: decryptedData) {
-        std::cout << c;
-    }
-    std::cout << std::endl;
-
-    if (decryptedAuthTag != authTag) {
-        std::cout << "Auth tags do not match" << std::endl;
-        std::cout << "Expected: " << std::endl;
-        for (const auto &c: authTag) {
-            std::cout << std::hex << static_cast<int>(c) << " ";
-        }
-        std::cout << std::endl;
-
-        std::cout << "Got: " << std::endl;
-        for (const auto &c: decryptedAuthTag) {
-            std::cout << std::hex << static_cast<int>(c) << " ";
-        }
-        std::cout << std::endl;
-        return false;
-    }
-
-    out = decryptedData;
-
-    return true;
-}*/
-
 bool shieldy_sdk::NativeCommunication::compute_shared_secret(const uint8_t *nativePubKey, const uint8_t *appSalt) {
     uint8_t sharedSecret[ECC_PUB_KEY_SIZE]{};
     bool result = ecdh_shared_secret(mSdkPrivKey, nativePubKey, sharedSecret) == 1;
@@ -479,28 +305,47 @@ bool shieldy_sdk::NativeCommunication::compute_shared_secret(const uint8_t *nati
     return true;
 }
 
-std::vector<unsigned char> shieldy_sdk::NativeCommunication::encrypt_sdk_public_key(const uint8_t *appSalt) {
-    return encrypt(appSalt, mSdkPubKey, 32);
-}
-
 std::string shieldy_sdk::NativeCommunication::encrypt_message(const std::string &message) {
     std::vector<unsigned char> messageVec(message.begin(), message.end());
     std::vector<unsigned char> encryptedMessage = encrypt(mEncryptionKey, messageVec.data(), messageVec.size());
     return std::string{encryptedMessage.begin(), encryptedMessage.end()};
 }
 
-std::string shieldy_sdk::NativeCommunication::decrypt_message(const std::string &message) {
-    std::vector<unsigned char> messageVec(message.begin(), message.end());
-    std::vector<unsigned char> decryptedMessage;
-    if (!decrypt(mEncryptionKey, messageVec, decryptedMessage)) {
-        return "";
+std::pair<char *, size_t> shieldy_sdk::NativeCommunication::decrypt_message_safe(const char *buf, size_t len) {
+    if (buf == nullptr || len < CHACHA20_NONCE_BYTES + POLY1305_MAC_BYTES) {
+        return {};
     }
-    return std::string{decryptedMessage.begin(), decryptedMessage.end()};
+
+    std::vector<unsigned char> messageVec(buf, buf + len);
+    size_t messageSize = messageVec.size() - CHACHA20_NONCE_BYTES - POLY1305_MAC_BYTES;
+//    std::cout << "Decrypting message: " << dh_tests::vector_to_hex(messageVec) << std::endl;
+    char *decryptedMessagePtr = new char[messageSize];
+    if (!decrypt(mEncryptionKey, messageVec, decryptedMessagePtr)) {
+        return {};
+    }
+
+    return {decryptedMessagePtr, messageSize};
 }
 
+#if SHIELDY_DEBUG
+
 void shieldy_sdk::NativeCommunication::print_all() const {
-    std::cout << "sdk_pub: " << dh_tests::sha256_to_hex(mSdkPubKey, ECC_PUB_KEY_SIZE, 4) << " ";
-    std::cout << "sdk_priv: " << dh_tests::sha256_to_hex(mSdkPrivKey, ECC_PUB_KEY_SIZE, 4) << " ";
+    std::cout << "sdk_pub: " << utils::sha256_to_hex(mSdkPubKey, ECC_PUB_KEY_SIZE, 4) << " ";
+    std::cout << "sdk_priv: " << utils::sha256_to_hex(mSdkPrivKey, ECC_PUB_KEY_SIZE, 4) << " ";
     std::vector<unsigned char> encKey(mEncryptionKey, mEncryptionKey + 4); //show only first 4 bytes
-    std::cout << "enc_key: " << dh_tests::vector_to_hex(encKey) << std::endl;
+    std::cout << "enc_key: " << utils::vector_to_hex(encKey) << std::endl;
 }
+
+std::string shieldy_sdk::NativeCommunication::decrypt_message(const char *buf, size_t len) {
+    auto [out, outSize] = decrypt_message_safe(buf, len);
+    if (out == nullptr || outSize == 0) {
+        return "";
+    }
+
+    std::string result(out, outSize);
+    secure_zero_memory(reinterpret_cast<unsigned char *>(out), outSize);
+    delete[] out;
+    return result;
+}
+
+#endif
