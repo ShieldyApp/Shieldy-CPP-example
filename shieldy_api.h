@@ -37,100 +37,31 @@
 #endif
 
 namespace shieldy_sdk {
+    constexpr int GET_ENC_SIZE(int size) {
+        return size + CHACHA20_NONCE_BYTES + POLY1305_MAC_BYTES;
+    }
+
     constexpr int SIGNATURE_SIZE = 256;
     constexpr int SHA256_HASH_LEN = 32;
     constexpr int SHIELDY_SDK_SALT_SIZE = 32;
-    constexpr int MEMORY_ENCRYPTION_KEY_SIZE = 64;
     constexpr int SHIELDY_SDK_CHALLENGE_NONCE_SIZE = 16;
-    constexpr int SHIELDY_SDK_CHALLENGE_SIZE = SHA256_BLOCK_SIZE + CHACHA20_NONCE_BYTES + POLY1305_MAC_BYTES;
-
-    constexpr const char *NATIVE_LIBRARY_PATH = R"(C:\Users\Kaspek\CLionProjects\=SHIELDY=\ShieldyCore\cmake-builds\windows-x64-dev\cpp-module\native.dll)";
-    constexpr const char *NATIVE_LIBRARY_UPDATE_PATH = "lib/native.update";
-    using random_bytes_engine = std::independent_bits_engine<
-            std::random_device, CHAR_BIT, unsigned char>;
+    constexpr int SHIELDY_SDK_CHALLENGE_SIZE = GET_ENC_SIZE(SHA256_BLOCK_SIZE);
 
     namespace utils {
 
-        void generate_secure_random_bytes(unsigned char *buffer, size_t size) {
-            bool success = false;
+        void generate_secure_random_bytes(unsigned char *buffer, size_t size);
 
-#ifdef _WIN32
-            HCRYPTPROV hProvider;
-            if (CryptAcquireContext(&hProvider, nullptr, nullptr, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT)) {
-                if (CryptGenRandom(hProvider, size, buffer)) {
-                    success = true;
-                }
-                CryptReleaseContext(hProvider, 0);
-            }
-#else
-            std::ifstream urandom("/dev/urandom", std::ios::in | std::ios::binary);
-            if (urandom) {
-                urandom.read(reinterpret_cast<char*>(buffer), size);
-                if (urandom.gcount() == static_cast<std::streamsize>(size)) {
-                    success = true;
-                }
-            }
-#endif
+        void xor_bytes(unsigned char *data, size_t dataSize, const unsigned char *key, size_t keySize);
 
-            //if failed to generate secure random bytes, use pseudo random generator
-            if (!success) {
-                std::random_device rd;
-                for (size_t i = 0; i < size; ++i) {
-                    buffer[i] = rd() % 256;
-                }
-            }
-        }
+        void secure_zero_memory(unsigned char *data, size_t size);
 
-        void xor_bytes(unsigned char *data, size_t dataSize, const unsigned char *key, size_t keySize) {
-            for (size_t i = 0; i < dataSize; i++) {
-                data[i] = data[i] ^ key[i % keySize];
-            }
-        }
+        std::vector<std::string> split_str(const std::string &str, char delimiter);
 
-        void secure_zero_memory(unsigned char *data, size_t size) {
-#if defined(_WIN32)
-            SecureZeroMemory(data, size);
-#else
-            std::fill(data, data + size, 0);
-#endif
-        }
+        std::string vector_to_hex(const std::vector<unsigned char> &data);
 
-        std::vector<std::string> split_str(const std::string &str, char delimiter) {
-            std::vector<std::string> result;
-            std::stringstream ss(str);
-            std::string item;
+        std::string sha256_to_hex(const uint8_t *data, size_t size, int trunc);
 
-            while (std::getline(ss, item, delimiter)) {
-                result.push_back(item);
-            }
-
-            return result;
-        }
-
-        std::string vector_to_hex(const std::vector<unsigned char> &data) {
-            std::ostringstream os;
-            for (unsigned char i: data) {
-                os << std::hex << std::setfill('0') << std::setw(2) << (int) i;
-            }
-            return os.str();
-        }
-
-        std::string sha256_to_hex(const uint8_t *data, size_t size, int trunc) {
-            SHA256_CTX ctx;
-            sha256_init(&ctx);
-            sha256_update(&ctx, data, size);
-            uint8_t hash[SHA256_BLOCK_SIZE];
-            sha256_final(&ctx, hash);
-            if (trunc > 0) {
-                std::ostringstream os;
-                for (int i = 0; i < trunc; i++) {
-                    os << std::hex << std::setfill('0') << std::setw(2) << (int) hash[i];
-                }
-                return os.str();
-            } else {
-                return vector_to_hex(std::vector<unsigned char>(hash, hash + SHA256_BLOCK_SIZE));
-            }
-        }
+        bool is_file_exists(const std::string &name);
     }
 
     namespace win_utils {
@@ -149,6 +80,20 @@ namespace shieldy_sdk {
                            _In_ ULONG dataToCheckSize);
     }
 
+    namespace library_utils {
+        constexpr const char *NATIVE_LIBRARY_PATH = R"(C:\Users\Kaspek\CLionProjects\=SHIELDY=\ShieldyCore\cmake-builds\windows-x64-dev\cpp-module\native.dll)";
+        constexpr const char *NATIVE_LIBRARY_UPDATE_PATH = "lib/native.update";
+
+        std::string get_public_signing_key();
+
+        std::vector<unsigned char> read_native_library_bytes();
+
+        void update_if_available();
+
+        bool verify_native_library();
+
+    }
+
 #if SHIELDY_DEBUG
 
     static void display_error(const std::string &msg) {
@@ -165,29 +110,6 @@ namespace shieldy_sdk {
     }
 
 #endif
-
-    std::string vector_to_hex(const std::vector<unsigned char> &data);
-
-    bool is_file_exists(const std::string &name);
-
-    std::vector<std::string> split(const std::string &str, char delimiter);
-
-    void generate_secure_random_bytes(unsigned char *buffer, size_t size);
-
-    void xor_bytes(unsigned char *data, size_t dataSize, unsigned const char *key, size_t keySize);
-
-    void xor_bytes(char *data, size_t dataSize, unsigned const char *key, size_t keySize);
-
-    void secure_zero_memory(unsigned char *data, size_t size);
-
-    std::string get_rsa_key();
-
-
-    std::vector<unsigned char> read_native_library_bytes();
-
-    bool verify_native_library();
-
-    void update_if_available();
 
     class NativeCommunication {
     private:
@@ -220,10 +142,10 @@ namespace shieldy_sdk {
         NativeCommunication() = default;
 
         ~NativeCommunication() {
-            secure_zero_memory(mSdkPrivKey, ECC_PRV_KEY_SIZE);
-            secure_zero_memory(mSdkPubKey, ECC_PUB_KEY_SIZE);
-            secure_zero_memory(mEncryptionKey, SHA256_BLOCK_SIZE);
-            secure_zero_memory(mAppSalt, SHIELDY_SDK_SALT_SIZE);
+            utils::secure_zero_memory(mSdkPrivKey, ECC_PRV_KEY_SIZE);
+            utils::secure_zero_memory(mSdkPubKey, ECC_PUB_KEY_SIZE);
+            utils::secure_zero_memory(mEncryptionKey, SHA256_BLOCK_SIZE);
+            utils::secure_zero_memory(mAppSalt, SHIELDY_SDK_SALT_SIZE);
         }
 
 
@@ -237,8 +159,8 @@ namespace shieldy_sdk {
             std::copy(appSalt, appSalt + SHIELDY_SDK_SALT_SIZE, mAppSalt);
 
             //generate DH keys
-            generate_secure_random_bytes(mSdkPrivKey, ECC_PRV_KEY_SIZE);
-            generate_secure_random_bytes(mSdkPubKey, ECC_PUB_KEY_SIZE);
+            utils::generate_secure_random_bytes(mSdkPrivKey, ECC_PRV_KEY_SIZE);
+            utils::generate_secure_random_bytes(mSdkPubKey, ECC_PUB_KEY_SIZE);
             int genKey = ecdh_generate_keys(mSdkPubKey, mSdkPrivKey);
             if (genKey != 1) {
 #if SHIELDY_DEBUG
@@ -299,13 +221,13 @@ namespace shieldy_sdk {
 
         static std::string get_challenge_nonce() {
             std::vector<unsigned char> nonce(SHIELDY_SDK_CHALLENGE_NONCE_SIZE);
-            generate_secure_random_bytes(nonce.data(), SHIELDY_SDK_CHALLENGE_NONCE_SIZE);
+            utils::generate_secure_random_bytes(nonce.data(), SHIELDY_SDK_CHALLENGE_NONCE_SIZE);
             return std::string{nonce.begin(), nonce.end()};
         }
 
         static std::vector<unsigned char> encrypt(const uint8_t *key, uint8_t *data, size_t data_size) {
             std::vector<unsigned char> nonce(CHACHA20_NONCE_BYTES); //CHACHA20_NONCE_BYTES = 12
-            shieldy_sdk::generate_secure_random_bytes(nonce.data(), CHACHA20_NONCE_BYTES);
+            shieldy_sdk::utils::generate_secure_random_bytes(nonce.data(), CHACHA20_NONCE_BYTES);
 
             //in ChaCha20_Poly1305, cipherText is the same size as data
             std::vector<unsigned char> cipherText(data_size);
@@ -314,17 +236,17 @@ namespace shieldy_sdk {
             ChaCha20_Poly1305::aead_encrypt(cipherText.data(), authTag.data(), data, data_size, nullptr, 0, key,
                                             nonce.data());
 
-            std::cout << "Key: " << shieldy_sdk::vector_to_hex(std::vector<unsigned char>(key, key + 32)) << std::endl;
-            std::cout << "Nonce: " << shieldy_sdk::vector_to_hex(nonce) << std::endl;
-            std::cout << "AuthTag: " << shieldy_sdk::vector_to_hex(authTag) << std::endl;
-            std::cout << "CipherText: " << shieldy_sdk::vector_to_hex(cipherText) << std::endl;
+//            std::cout << "Key: " << shieldy_sdk::vector_to_hex(std::vector<unsigned char>(key, key + 32)) << std::endl;
+//            std::cout << "Nonce: " << shieldy_sdk::vector_to_hex(nonce) << std::endl;
+//            std::cout << "AuthTag: " << shieldy_sdk::vector_to_hex(authTag) << std::endl;
+//            std::cout << "CipherText: " << shieldy_sdk::vector_to_hex(cipherText) << std::endl;
 
             //CHACHA20_NONCE_BYTES + POLY1305_MAC_BYTES + data_size
             std::vector<unsigned char> outVec;
             outVec.insert(outVec.end(), nonce.begin(), nonce.end());
             outVec.insert(outVec.end(), authTag.begin(), authTag.end());
             outVec.insert(outVec.end(), cipherText.begin(), cipherText.end());
-            std::cout << "Encrypted data: " << shieldy_sdk::vector_to_hex(outVec) << std::endl;
+//            std::cout << "Encrypted data: " << shieldy_sdk::vector_to_hex(outVec) << std::endl;
 
             return outVec;
         }
@@ -358,7 +280,7 @@ namespace shieldy_sdk {
 #if SHIELDY_DEBUG
                     std::cout << "Decryption failed, tags do not match" << std::endl;
 #endif
-                    secure_zero_memory(reinterpret_cast<unsigned char *>(out), data.size());
+                    utils::secure_zero_memory(reinterpret_cast<unsigned char *>(out), data.size());
                     return false;
                 }
             }
@@ -440,7 +362,7 @@ namespace shieldy_sdk {
 
 
         bool load_library_and_bindings() {
-            HINSTANCE libInstance = LoadLibrary(NATIVE_LIBRARY_PATH);
+            HINSTANCE libInstance = LoadLibrary(library_utils::NATIVE_LIBRARY_PATH);
             if (!libInstance) {
 #if SHIELDY_DEBUG
                 std::cout << "Failed to load native library, error: " << win_utils::get_last_error_string()
@@ -555,25 +477,6 @@ namespace shieldy_sdk {
         }
 
 
-        bool set_callbacks(MessageCallback messageCallback, DownloadProgressCallback downloadProgressCallback) {
-            if (messageCallback == nullptr) {
-#if SHIELDY_DEBUG
-                display_error("Message callback is null");
-#endif
-                return false;
-            }
-            if (downloadProgressCallback == nullptr) {
-#if SHIELDY_DEBUG
-                display_error("Download progress callback is null");
-#endif
-                return false;
-            }
-
-            mMessageCallback = messageCallback;
-            mDownloadProgressCallback = downloadProgressCallback;
-            return true;
-        }
-
         bool perform_challenge() {
             if (!mInitialized) {
 #if SHIELDY_DEBUG
@@ -610,69 +513,95 @@ namespace shieldy_sdk {
             return result;
         }
 
-        bool initialize(const std::string &appGuid, const std::string &version, const unsigned char *appSalt) {
-            if (!mNativeCommunication->initialize(appSalt)) {
+        bool set_callbacks(MessageCallback messageCallback, DownloadProgressCallback downloadProgressCallback) {
+            if (messageCallback == nullptr) {
+#if SHIELDY_DEBUG
+                display_error("Message callback is null");
+#endif
                 return false;
             }
-
-            //replace native library file if update is available
-            update_if_available();
-
-            //check if native library is signed and not tampered
-            if (!verify_native_library()) {
+            if (downloadProgressCallback == nullptr) {
 #if SHIELDY_DEBUG
-                display_error("Native library verification failed");
+                display_error("Download progress callback is null");
 #endif
                 return false;
             }
 
-            //load dll and bind functions
-            if (!load_library_and_bindings()) {
-                return false;
-            }
-
-            uint8_t *nativePubKey = nullptr;
-            std::string challengeNonce = mNativeCommunication->get_challenge_nonce();
-
-            char *challengeResponse = SC_Initialize_ptr(appGuid.c_str(), version.c_str(), 1, &nativePubKey,
-                                                        mNativeCommunication->mEncSdkPubKey.data(),
-                                                        challengeNonce.data());
-            if (challengeResponse == nullptr) {
-#if SHIELDY_DEBUG
-                display_error("Failed to initialize ShieldyCore SDK, challenge response is null");
-#endif
-                return false;
-            }
-
-            //exchange public keys
-            if (!mNativeCommunication->compute_shared_secret(nativePubKey, appSalt)) {
-#if SHIELDY_DEBUG
-                display_error("Failed to compute shared secret");
-#endif
-                return false;
-            }
-
-            //calculate challenge response
-            if (!mNativeCommunication->solve_challenge(challengeNonce.data(), challengeResponse)) {
-#if SHIELDY_DEBUG
-                display_error("Failed to solve challenge (initialize) challenge response is incorrect");
-#endif
-                return false;
-            }
-
-            //challenge response is manually allocated by native library, so we need to free it
-            if (!SC_FreeMemory_ptr(&challengeResponse)) {
-#if SHIELDY_DEBUG
-                display_error("Failed to free memory for challenge response");
-#endif
-                return false;
-            }
-
-            //mark as initialized
-            mInitialized = true;
-            mNativeCommunication->print_all();
-
+            mMessageCallback = messageCallback;
+            mDownloadProgressCallback = downloadProgressCallback;
             return true;
+        }
+
+        bool initialize(const std::string &appGuid, const std::string &version, const unsigned char *appSalt) {
+            try {
+                if (!mNativeCommunication->initialize(appSalt)) {
+                    return false;
+                }
+
+                //replace native library file if update is available
+                library_utils::update_if_available();
+
+                //check if native library is signed and not tampered
+                if (!library_utils::verify_native_library()) {
+#if SHIELDY_DEBUG
+                    display_error("Native library verification failed");
+#endif
+                    return false;
+                }
+
+                //load dll and bind functions
+                if (!load_library_and_bindings()) {
+                    return false;
+                }
+
+                uint8_t *nativePubKey = nullptr;
+                std::string challengeNonce = mNativeCommunication->get_challenge_nonce();
+
+                char *challengeResponse = SC_Initialize_ptr(appGuid.c_str(), version.c_str(), 1, &nativePubKey,
+                                                            mNativeCommunication->mEncSdkPubKey.data(),
+                                                            challengeNonce.data());
+                if (challengeResponse == nullptr) {
+#if SHIELDY_DEBUG
+                    display_error("Failed to initialize ShieldyCore SDK, challenge response is null");
+#endif
+                    return false;
+                }
+
+                //exchange public keys
+                if (!mNativeCommunication->compute_shared_secret(nativePubKey, appSalt)) {
+#if SHIELDY_DEBUG
+                    display_error("Failed to compute shared secret");
+#endif
+                    return false;
+                }
+
+                //calculate challenge response
+                if (!mNativeCommunication->solve_challenge(challengeNonce.data(), challengeResponse)) {
+#if SHIELDY_DEBUG
+                    display_error("Failed to solve challenge (initialize) challenge response is incorrect");
+#endif
+                    return false;
+                }
+
+                //challenge response is manually allocated by native library, so we need to free it
+                if (!SC_FreeMemory_ptr(&challengeResponse)) {
+#if SHIELDY_DEBUG
+                    display_error("Failed to free memory for challenge response");
+#endif
+                    return false;
+                }
+
+                //mark as initialized
+                mInitialized = true;
+                mNativeCommunication->print_all();
+
+                return true;
+            } catch (std::exception &e) {
+#if SHIELDY_DEBUG
+                display_error("Failed to initialize ShieldyCore SDK, exception appeard: " + std::string(e.what()));
+#endif
+                return false;
+            }
         }
 
         bool authorize(const std::string &licenseKey) {
@@ -770,7 +699,6 @@ namespace shieldy_sdk {
             return result;
         }
 
-
         //WARNING: this function returns a pointer to a buffer that must be freed with delete[]
         std::pair<char *, size_t> download_file_safe(const std::string &name) {
             if (!mInitialized || !mAuthenticated) {
@@ -822,15 +750,5 @@ namespace shieldy_sdk {
         }
     };
 }
-
-/*
-namespace dh_tests {
-
-    std::string vector_to_hex(const std::vector<unsigned char> &data);
-
-    std::string sha256_to_hex(const uint8_t *data, size_t size, int trunc = 0);
-}
-*/
-
 
 #endif //CPPSHIELDYEXAMPLEWINAPI_SHIELDY_API_H
