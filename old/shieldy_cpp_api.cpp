@@ -388,7 +388,7 @@ std::string ShieldyApi::get_variable(const std::string &key) {
         delete[] secret;
     }
 
-    return _xor(result, get_salt());;
+    return _xor(result, get_salt());
 }
 
 /**

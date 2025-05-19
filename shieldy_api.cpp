@@ -147,25 +147,6 @@ shieldy_sdk::win_utils::rsa_verify(PCWSTR algorithm, PCSTR keyAsPem, BYTE *signa
     return HRESULT_FROM_WIN32(hr);
 }
 
-bool shieldy_sdk::NativeCommunication::compute_shared_secret(const uint8_t *nativePubKey, const uint8_t *appSalt) {
-    uint8_t sharedSecret[ECC_PUB_KEY_SIZE]{};
-    bool result = ecdh_shared_secret(mSdkPrivKey, nativePubKey, sharedSecret) == 1;
-    if (!result) {
-#if SHIELDY_DEBUG
-        std::cout << "Failed to compute shared secret" << std::endl;
-#endif
-        return false;
-    }
-
-    SHA256_CTX ctx;
-    sha256_init(&ctx);
-    sha256_update(&ctx, sharedSecret, ECC_PUB_KEY_SIZE);
-    sha256_update(&ctx, appSalt, shieldy_sdk::SHIELDY_SDK_SALT_SIZE);
-    sha256_final(&ctx, mEncryptionKey);
-
-    return true;
-}
-
 std::string shieldy_sdk::NativeCommunication::encrypt_message(const std::string &message) {
     std::vector<unsigned char> messageVec(message.begin(), message.end());
     std::vector<unsigned char> encryptedMessage = encrypt(mEncryptionKey, messageVec.data(), messageVec.size());
@@ -191,10 +172,9 @@ std::pair<char *, size_t> shieldy_sdk::NativeCommunication::decrypt_message_safe
 #if SHIELDY_DEBUG
 
 void shieldy_sdk::NativeCommunication::print_all() const {
-    std::cout << "sdk_pub: " << utils::sha256_to_hex(mSdkPubKey, ECC_PUB_KEY_SIZE, 4) << " ";
-    std::cout << "sdk_priv: " << utils::sha256_to_hex(mSdkPrivKey, ECC_PUB_KEY_SIZE, 4) << " ";
-    std::vector<unsigned char> encKey(mEncryptionKey, mEncryptionKey + 4); //show only first 4 bytes
-    std::cout << "enc_key: " << utils::vector_to_hex(encKey) << std::endl;
+    std::cout << "sdk_pub: " << utils::sha256_to_hex(mSdkPubKey, 4) << " ";
+    std::cout << "sdk_priv: " << utils::sha256_to_hex(mSdkPrivKey, 4) << " ";
+    std::cout << "enc_key: " << utils::sha256_to_hex(mEncryptionKey, 4) << std::endl;
 }
 
 std::string shieldy_sdk::NativeCommunication::decrypt_message(const char *buf, size_t len) {
@@ -377,12 +357,6 @@ void shieldy_sdk::utils::generate_secure_random_bytes(unsigned char *buffer, siz
     }
 }
 
-void shieldy_sdk::utils::xor_bytes(unsigned char *data, size_t dataSize, const unsigned char *key, size_t keySize) {
-    for (size_t i = 0; i < dataSize; i++) {
-        data[i] = data[i] ^ key[i % keySize];
-    }
-}
-
 void shieldy_sdk::utils::secure_zero_memory(unsigned char *data, size_t size) {
 #if defined(_WIN32)
     SecureZeroMemory(data, size);
@@ -431,4 +405,8 @@ std::string shieldy_sdk::utils::sha256_to_hex(const uint8_t *data, size_t size, 
 bool shieldy_sdk::utils::is_file_exists(const std::string &name) {
     std::ifstream f(name.c_str());
     return f.good();
+}
+
+std::string shieldy_sdk::utils::sha256_to_hex(const std::vector<unsigned char> &vec, int trunc) {
+    return sha256_to_hex(vec.data(), vec.size(), trunc);
 }

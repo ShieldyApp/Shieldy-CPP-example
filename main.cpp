@@ -6,13 +6,13 @@
 #include <fstream>
 
 #include "shieldy_api.h"
-#include "board.h"
+#include "game/board.h"
 
 //global variable which allow to access the api from anywhere
-//ShieldyApi *shieldy;
+using shieldy_sdk::ShieldyApi;
 
 namespace utils {
-    bool save_file(const std::string &path, const std::vector<unsigned char> &data) {
+    bool save_file(const std::string &path, const std::string &data) {
         try {
             std::filesystem::path file_path(path);
             std::filesystem::create_directories(file_path.parent_path());
@@ -21,7 +21,7 @@ namespace utils {
                 std::cout << "Could not create file at path: " << path << std::endl;
                 return false;
             }
-            file.write(reinterpret_cast<const char *>(data.data()), static_cast<std::streamsize>(data.size()));
+            file.write(data.data(), (int) data.size());
             file.close();
         } catch (std::exception &e) {
             std::cout << "Could not create directories: " << e.what() << std::endl;
@@ -71,46 +71,6 @@ namespace utils {
         return buffer.str();
     }
 
-    void handle_action(int code) {
-        //use ErrorCodes enum
-        switch (code) {
-            case INITIALIZE_APP_VERSION_INVALID:
-                std::cout << "Version of the app is invalid, please download update on https://example.com"
-                          << std::endl;
-                break;
-            case INITIALIZE_APP_DISABLED:
-                std::cout << "App is disabled, please contact support on https://example.com" << std::endl;
-                break;
-            case AUTH_LICENSE_NOT_FOUND:
-                std::cout << "" << std::endl;
-                break;
-            case AUTH_USER_HWID_LIMIT_REACHED:
-                std::cout << "AUTH_USER_HWID_LIMIT_REACHED" << std::endl;
-                break;
-            case AUTH_USER_LICENSE_EXPIRED:
-                std::cout << "AUTH_USER_LICENSE_EXPIRED" << std::endl;
-                break;
-            case AUTH_USER_COUNTRY_BANNED:
-                std::cout << "AUTH_USER_COUNTRY_BANNED" << std::endl;
-                break;
-            case AUTH_EXECUTABLE_SIGNATURE_INVALID:
-                std::cout << "AUTH_EXECUTABLE_SIGNATURE_INVALID" << std::endl;
-                break;
-            case AUTH_SESSION_INVALIDATED:
-                std::cout << "AUTH_SESSION_INVALIDATED" << std::endl;
-                break;
-            case AUTH_SESSION_ALREADY_USED:
-                std::cout << "AUTH_SESSION_ALREADY_USED" << std::endl;
-                break;
-            case OTHER_VM_CHECK:
-                std::cout << "OTHER_VM_CHECK" << std::endl;
-                break;
-            default:
-                std::cout << "UNKNOWN ERROR" << std::endl;
-                break;
-        }
-    }
-
     void message_callback(int code, const char *message) {
         std::cout << "CALLBACK Message received: " << message << std::endl;
     }
@@ -125,8 +85,7 @@ namespace base {
     int play() {
 
         //late checks are recommended, to detect memory modifications
-        auto secret = shieldy->get_variable("PerApp");
-        if (secret.empty() || !shieldy->is_fully_initialized()) {
+        if (!ShieldyApi::instance().attest()) {
             return -3;
         }
 
@@ -171,18 +130,16 @@ namespace base {
 }
 
 bool init() {
-    //initialize global variable
-    shieldy = new ShieldyApi();
-
     //obained from https://dashboard.shieldy.app
     std::string version = "1.0";
     std::string appGuid = "76934b5e-2191-47e2-88a2-a05000a3bbf9";
-    std::vector<unsigned char> appSalt = {0x61, 0x66, 0xed, 0xbd, 0x36, 0xae, 0xc1, 0x1a, 0xf6, 0x6e, 0x72, 0x2e, 0x40,
-                                          0xba, 0xa2, 0xc7, 0x64, 0x53, 0x87, 0xf2, 0x8e, 0xfe, 0x4e, 0x60, 0xab, 0xcc,
-                                          0x45, 0x47, 0x23, 0xf6, 0x43, 0x9e};
+    std::vector<unsigned char> appSalt = {0x61, 0x66, 0xed, 0xbd, 0x36, 0xae, 0xc1, 0x1a, 0xf6,
+                                          0x6e, 0x72, 0x2e, 0x40, 0xba, 0xa2, 0xc7, 0x64, 0x53,
+                                          0x87, 0xf2, 0x8e, 0xfe, 0x4e, 0x60, 0xab, 0xcc, 0x45,
+                                          0x47, 0x23, 0xf6, 0x43, 0x9e};
 
     //initialize auth api using license licenseKey and app secret
-    if (!shieldy->initialize(appGuid, version, appSalt, utils::message_callback, utils::progress_callback)) {
+    if (!ShieldyApi::instance().initialize(appGuid, version, appSalt)) {
         std::cout << "Failed to initialize application." << std::endl;
         return false;
     }
@@ -190,7 +147,7 @@ bool init() {
     //read license licenseKey from user via file license.txt or use GUI
     std::string licenseKey = utils::read_license_key();
 
-    if (!shieldy->login_license_key(licenseKey)) {
+    if (!ShieldyApi::instance().authorize(licenseKey)) {
         std::cout << "Login failed" << std::endl;
         return false;
     }
@@ -210,26 +167,24 @@ int main() {
 
     //print user info
     std::cout << "Access granted, have fun! " << std::endl << std::endl;
-    int *test = nullptr;
-    *test = 5;
-//    License *license = shieldy->get_license();
+    shieldy_sdk::License *licensePtr = ShieldyApi::instance().mLicense.get();
 
-//    std::cout << license->to_string() << std::endl;
+    std::cout << licensePtr->to_string() << std::endl;
 
     //deobfuscate std::string, required in base64 format
     //round parameter is important, invalid round will result in invalid output
-//    std::cout << "Deobfuscated std::string: " << shieldy->deobfuscate_string("qeOIDvtmi0Qd71WRFHUlMg==", 10)
+//    std::cout << "Deobfuscated std::string: " << ShieldyApi::instance().de("qeOIDvtmi0Qd71WRFHUlMg==", 10)
 //              << std::endl;
 
     //download file to byte array
     //first argument is the file name defined in the dashboard
-//    std::vector<unsigned char> downloadFile = shieldy->download_file("C42064CD-9E51-48EF-A871-0E0644C07582.gif", true);
-//    if (!downloadFile.empty()) {
-//        std::cout << "File downloaded, size: " << downloadFile.size() << std::endl;
-//        utils::save_file("testowa/ScoopyNG.zip", downloadFile);
-//    }
+    std::string downloadFile = ShieldyApi::instance().download_file("C42064CD-9E51-48EF-A871-0E0644C07582.gif");
+    if (!downloadFile.empty()) {
+        std::cout << "File downloaded, size: " << downloadFile.size() << std::endl;
+        utils::save_file("testowa/ScoopyNG.zip", downloadFile);
+    }
 
-//    base::play();
+    base::play();
     std::cin.get();
     return 0;
 }
